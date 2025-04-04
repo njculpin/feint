@@ -10,34 +10,6 @@ document.addEventListener("DOMContentLoaded", () => {
   container.id = "container";
   document.body.appendChild(container);
 
-  // Add instructions
-  const instructions = document.createElement("div");
-  instructions.className = "instructions";
-  instructions.textContent =
-    "Use WASD or Arrow Keys to roll the highlighted die. The die with the highest face value will be highlighted and is the next to move.";
-  document.body.appendChild(instructions);
-
-  // Add a rank display element
-  const rankDisplay = document.createElement("div");
-  rankDisplay.className = "rank-display";
-  rankDisplay.style.position = "absolute";
-  rankDisplay.style.top = "70px";
-  rankDisplay.style.left = "20px";
-  rankDisplay.style.color = "white";
-  rankDisplay.style.fontFamily = "Arial, sans-serif";
-  rankDisplay.style.fontSize = "24px";
-  rankDisplay.style.fontWeight = "bold";
-  rankDisplay.style.backgroundColor = "rgba(0, 0, 0, 0.7)";
-  rankDisplay.style.padding = "10px";
-  rankDisplay.style.borderRadius = "5px";
-  rankDisplay.style.zIndex = "10";
-  document.body.appendChild(rankDisplay);
-
-  // Function to update the rank display
-  const updateRankDisplay = (rank: number) => {
-    rankDisplay.textContent = `Current Highest Rank: ${rank}`;
-  };
-
   // Scene setup
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x111111);
@@ -167,61 +139,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // Add individual die rank displays
-  const createDieRankLabels = () => {
-    dice.forEach((die, index) => {
-      const dieLabel = document.createElement("div");
-      dieLabel.className = "die-label";
-      dieLabel.id = `die-label-${index}`;
-      dieLabel.style.position = "absolute";
-      dieLabel.style.color = "white";
-      dieLabel.style.fontFamily = "Arial, sans-serif";
-      dieLabel.style.fontSize = "16px";
-      dieLabel.style.backgroundColor = "rgba(255, 0, 0, 0.7)";
-      dieLabel.style.padding = "5px";
-      dieLabel.style.borderRadius = "3px";
-      dieLabel.style.zIndex = "10";
-      dieLabel.style.pointerEvents = "none"; // Don't interfere with clicks
-      document.body.appendChild(dieLabel);
-    });
-  };
-
-  // Update die labels in the animation loop
-  const updateDieLabels = () => {
-    dice.forEach((die, index) => {
-      const dieLabel = document.getElementById(`die-label-${index}`);
-      if (dieLabel) {
-        // Convert die position to screen coordinates
-        const position = new THREE.Vector3();
-        position.copy(die.mesh.position);
-        position.y += die.size; // Position above the die
-
-        // Project the 3D position to 2D screen coordinates
-        const vector = position.clone();
-        vector.project(camera);
-
-        // Convert to CSS coordinates
-        const x = (vector.x * 0.5 + 0.5) * window.innerWidth;
-        const y = (-vector.y * 0.5 + 0.5) * window.innerHeight;
-
-        // Update label position and content
-        dieLabel.style.left = `${x}px`;
-        dieLabel.style.top = `${y}px`;
-        dieLabel.textContent = `Face: ${die.topFace}`;
-
-        // Highlight the label if this die is active
-        if (die === activeDie) {
-          dieLabel.style.backgroundColor = "rgba(255, 255, 0, 0.7)"; // Yellow for active die
-        } else {
-          dieLabel.style.backgroundColor = "rgba(255, 0, 0, 0.7)"; // Red for inactive dice
-        }
-      }
-    });
-  };
-
-  // Call createDieRankLabels after creating all dice
-  createDieRankLabels();
-
   // Active die reference
   let activeDie: Die | null = null;
 
@@ -247,9 +164,6 @@ document.addEventListener("DOMContentLoaded", () => {
     // Find dice with highest rank
     const { dice: highestDice, rank } = findHighestRankDice();
 
-    // Update the rank display
-    updateRankDisplay(rank);
-
     // Unhighlight all dice
     dice.forEach((die) => die.highlight(false));
 
@@ -263,13 +177,6 @@ document.addEventListener("DOMContentLoaded", () => {
     // If the active die is no longer among the highest-ranked dice, deselect it
     else if (activeDie && !highestDice.includes(activeDie)) {
       activeDie = null;
-    }
-
-    // Update status message
-    if (highestDice.length > 1 && !activeDie) {
-      instructions.textContent = `Multiple dice with rank ${rank} are tied for highest. Click on one to select it.`;
-    } else if (activeDie) {
-      instructions.textContent = `Use WASD or Arrow Keys to roll the highlighted die with rank ${rank}.`;
     }
   };
 
@@ -314,9 +221,6 @@ document.addEventListener("DOMContentLoaded", () => {
           // Set as active die
           activeDie = die;
           console.log(`Die with rank ${die.topFace} selected by click`);
-
-          // Update instructions
-          instructions.textContent = `Use WASD or Arrow Keys to roll the highlighted die with rank ${rank}.`;
 
           return;
         }
@@ -444,8 +348,6 @@ document.addEventListener("DOMContentLoaded", () => {
       console.log(
         "No active die selected. Please click on a highlighted die to select it."
       );
-      instructions.textContent =
-        "No active die selected. Please click on a highlighted die to select it.";
     }
 
     // Handle camera recentering with F key
@@ -469,7 +371,6 @@ document.addEventListener("DOMContentLoaded", () => {
   // Animation loop
   function animate() {
     requestAnimationFrame(animate);
-    updateDieLabels(); // Update die labels each frame
     renderer.render(scene, camera);
   }
 
