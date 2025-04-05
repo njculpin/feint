@@ -39,14 +39,14 @@ document.addEventListener("DOMContentLoaded", () => {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x111111);
 
-  // Camera setup - completely top-down view
+  // Camera setup - 45-degree angle view
   const camera = new THREE.PerspectiveCamera(
     45,
     window.innerWidth / window.innerHeight,
     0.1,
     1000
   );
-  const initialCameraPosition = new THREE.Vector3(0, 50, 0); // Position directly above
+  const initialCameraPosition = new THREE.Vector3(0, 35, 35); // Position at 45-degree angle
   const initialCameraTarget = new THREE.Vector3(0, 0, 0); // Look at center of board
   camera.position.copy(initialCameraPosition);
   camera.lookAt(initialCameraTarget);
@@ -892,7 +892,7 @@ document.addEventListener("DOMContentLoaded", () => {
     return false;
   }
 
-  // Function to check if a die is at a flag position
+  // Modify the checkFlagCapture function to make all opposing dice explode when a flag is captured
   function checkFlagCapture(die: Die) {
     const isRedDie = redDice.includes(die);
 
@@ -902,6 +902,16 @@ document.addEventListener("DOMContentLoaded", () => {
       Math.abs(die.mesh.position.x - oppositeStartPos.x) < 0.1 &&
       Math.abs(die.mesh.position.z - oppositeStartPos.z) < 0.1
     ) {
+      // Make all blue dice explode
+      const blueDiceCopy = [...blueDice];
+      blueDiceCopy.forEach((blueDie) => {
+        createExplosion(blueDie.mesh.position.clone(), 0x0066ff);
+        scene.remove(blueDie.mesh);
+      });
+
+      // Clear the blue dice array
+      blueDice.length = 0;
+
       // Red team wins!
       gameOver = true;
       winner = "red";
@@ -915,6 +925,16 @@ document.addEventListener("DOMContentLoaded", () => {
       Math.abs(die.mesh.position.x - startPosition.x) < 0.1 &&
       Math.abs(die.mesh.position.z - startPosition.z) < 0.1
     ) {
+      // Make all red dice explode
+      const redDiceCopy = [...redDice];
+      redDiceCopy.forEach((redDie) => {
+        createExplosion(redDie.mesh.position.clone(), 0xff0000);
+        scene.remove(redDie.mesh);
+      });
+
+      // Clear the red dice array
+      redDice.length = 0;
+
       // Blue team wins!
       gameOver = true;
       winner = "blue";
@@ -1087,17 +1107,15 @@ document.addEventListener("DOMContentLoaded", () => {
     };
 
     // Update camera position based on mouse movement
-    // For top-down view, we move in X and Z while keeping Y constant
     const deltaX = -deltaMove.x * panSpeed;
     const deltaZ = deltaMove.y * panSpeed; // Inverted for intuitive panning
 
-    // Apply panning without limits
+    // Apply panning without changing the camera's height (Y position)
     camera.position.x += deltaX;
     camera.position.z += deltaZ;
 
-    // Update the camera target to maintain the top-down view
-    const target = new THREE.Vector3(camera.position.x, 0, camera.position.z);
-    camera.lookAt(target);
+    // Always look at the center of the board (0,0,0) to keep it in view
+    camera.lookAt(initialCameraTarget);
 
     // Update previous position
     previousMousePosition = {
