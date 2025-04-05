@@ -30,6 +30,11 @@ document.addEventListener("DOMContentLoaded", () => {
   infoDisplay.className = "info";
   document.body.appendChild(infoDisplay);
 
+  // Add a game status display
+  const gameStatusDisplay = document.createElement("div");
+  gameStatusDisplay.className = "game-status";
+  document.body.appendChild(gameStatusDisplay);
+
   // Scene setup
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x111111);
@@ -79,6 +84,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Get starting position for die
   const startPosition = gameBoard.getStartPosition(dieSize);
+  const endPosition = gameBoard.getEndPosition(dieSize);
 
   // Create array to store all dice
   const redDice: Die[] = [];
@@ -307,6 +313,10 @@ document.addEventListener("DOMContentLoaded", () => {
   // Track if cursor is currently moving
   let isCursorMoving = false;
 
+  // Track game state
+  let gameOver = false;
+  let winner: "red" | "blue" | null = null;
+
   // Track key states
   const keyStates: { [key: string]: boolean } = {
     KeyW: false,
@@ -362,6 +372,38 @@ document.addEventListener("DOMContentLoaded", () => {
       <strong>Selected Die</strong><br>
       Top Face: ${activeDie.topFace}
     `;
+  }
+
+  // Function to update game status display
+  function updateGameStatusDisplay() {
+    if (gameOver) {
+      gameStatusDisplay.innerHTML = `
+        <div class="game-over">
+          <h2>Game Over!</h2>
+          <h3>${winner === "red" ? "Red" : "Blue"} team wins!</h3>
+          <button id="restart-button">Restart Game</button>
+        </div>
+      `;
+
+      // Add event listener to restart button
+      const restartButton = document.getElementById("restart-button");
+      if (restartButton) {
+        restartButton.addEventListener("click", restartGame);
+      }
+    } else {
+      gameStatusDisplay.innerHTML = `
+        <div class="game-status-info">
+          <p>Red Dice: ${redDice.length}</p>
+          <p>Blue Dice: ${blueDice.length}</p>
+        </div>
+      `;
+    }
+  }
+
+  // Function to restart the game
+  function restartGame() {
+    // Reload the page for simplicity
+    window.location.reload();
   }
 
   // Function to animate cursor movement
@@ -672,11 +714,38 @@ document.addEventListener("DOMContentLoaded", () => {
       .clone()
       .add(direction.clone().multiplyScalar(dieSize));
 
-    // Check if new position is within boundaries and not occupied
-    return (
-      gameBoard.isWithinBoundaries(newPosition) &&
-      !isPositionOccupied(newPosition)
-    );
+    // Check if new position is within boundaries
+    if (!gameBoard.isWithinBoundaries(newPosition)) {
+      return false;
+    }
+
+    // Check if new position is occupied by a die of the same color
+    const isSameColorDieAtPosition = (
+      position: THREE.Vector3,
+      isRed: boolean
+    ): boolean => {
+      const diceArray = isRed ? redDice : blueDice;
+      return diceArray.some(
+        (d) =>
+          Math.abs(d.mesh.position.x - position.x) < 0.1 &&
+          Math.abs(d.mesh.position.z - position.z) < 0.1
+      );
+    };
+
+    // If the die is red and there's another red die at the new position, can't move
+    if (redDice.includes(die) && isSameColorDieAtPosition(newPosition, true)) {
+      return false;
+    }
+
+    // If the die is blue and there's another blue die at the new position, can't move
+    if (
+      blueDice.includes(die) &&
+      isSameColorDieAtPosition(newPosition, false)
+    ) {
+      return false;
+    }
+
+    return true;
   };
 
   // Function to check if a die is among the highest rank red dice
@@ -685,9 +754,202 @@ document.addEventListener("DOMContentLoaded", () => {
     return highestDice.includes(die);
   };
 
+  // Function to create explosion effect
+  function createExplosion(position: THREE.Vector3, color: number) {
+    // Create particles
+    const particleCount = 30;
+    const particles: THREE.Mesh[] = [];
+
+    for (let i = 0; i < particleCount; i++) {
+      // Create a small cube for each particle
+      const geometry = new THREE.BoxGeometry(0.2, 0.2, 0.2);
+      const material = new THREE.MeshStandardMaterial({
+        color: color,
+        emissive: color,
+        emissiveIntensity: 0.5,
+      });
+
+      const particle = new THREE.Mesh(geometry, material);
+
+      // Position at explosion center
+      particle.position.copy(position);
+
+      // Random velocity
+      const velocity = new THREE.Vector3(
+        (Math.random() - 0.5) * 0.3,
+        Math.random() * 0.2,
+        (Math.random() - 0.5) * 0.3
+      );
+
+      // Add to scene
+      scene.add(particle);
+
+      // Store particle with its velocity
+      particles.push(particle);
+      (particle as any).velocity = velocity;
+    }
+
+    // Animate particles
+    const startTime = Date.now();
+
+    function animateParticles() {
+      const elapsed = Date.now() - startTime;
+
+      // Remove particles after 1 second
+      if (elapsed > 1000) {
+        particles.forEach((particle) => scene.remove(particle));
+        return;
+      }
+
+      // Update particle positions
+      particles.forEach((particle) => {
+        const vel = (particle as any).velocity;
+
+        // Apply gravity
+        vel.y -= 0.01;
+
+        // Update position
+        particle.position.add(vel);
+
+        // Fade out
+        const scale = 1 - elapsed / 1000;
+        particle.scale.set(scale, scale, scale);
+      });
+
+      requestAnimationFrame(animateParticles);
+    }
+
+    animateParticles();
+  }
+
+  // Function to remove a die from the game
+  function removeDie(die: Die, isRed: boolean) {
+    // Create explosion effect
+    createExplosion(die.mesh.position.clone(), isRed ? 0xff0000 : 0x0066ff);
+
+    // Remove from scene
+    scene.remove(die.mesh);
+
+    // Remove from array
+    const diceArray = isRed ? redDice : blueDice;
+    const index = diceArray.indexOf(die);
+    if (index !== -1) {
+      diceArray.splice(index, 1);
+    }
+
+    // Remove from occupied positions
+    const posIndex = occupiedPositions.findIndex(
+      (pos) =>
+        Math.abs(pos.x - die.mesh.position.x) < 0.1 &&
+        Math.abs(pos.z - die.mesh.position.z) < 0.1
+    );
+
+    if (posIndex !== -1) {
+      occupiedPositions.splice(posIndex, 1);
+    }
+
+    // If die was selected, deselect it
+    if (selectedDice.includes(die)) {
+      selectedDice = [];
+    }
+
+    // Check for win conditions
+    checkWinConditions();
+
+    // Update displays
+    updateHighlightedDice();
+    updateGameStatusDisplay();
+  }
+
+  // Function to check for collisions between dice
+  function checkCollisions(activeDie: Die, newPosition: THREE.Vector3) {
+    // Check if the active die is red
+    const isRedDie = redDice.includes(activeDie);
+
+    // Get the opposing dice array
+    const opposingDice = isRedDie ? blueDice : redDice;
+
+    // Check for collision with opposing dice
+    for (const opposingDie of opposingDice) {
+      if (
+        Math.abs(opposingDie.mesh.position.x - newPosition.x) < 0.1 &&
+        Math.abs(opposingDie.mesh.position.z - newPosition.z) < 0.1
+      ) {
+        // Collision detected!
+        // If red die collides with blue die, remove blue die
+        if (isRedDie) {
+          removeDie(opposingDie, false);
+        }
+        // If blue die collides with red die, remove red die
+        else {
+          removeDie(opposingDie, true);
+        }
+
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  // Function to check if a die is at a flag position
+  function checkFlagCapture(die: Die) {
+    const isRedDie = redDice.includes(die);
+
+    // Check if red die is at blue flag (opposite start position)
+    if (
+      isRedDie &&
+      Math.abs(die.mesh.position.x - oppositeStartPos.x) < 0.1 &&
+      Math.abs(die.mesh.position.z - oppositeStartPos.z) < 0.1
+    ) {
+      // Red team wins!
+      gameOver = true;
+      winner = "red";
+      updateGameStatusDisplay();
+      return true;
+    }
+
+    // Check if blue die is at red flag (start position)
+    if (
+      !isRedDie &&
+      Math.abs(die.mesh.position.x - startPosition.x) < 0.1 &&
+      Math.abs(die.mesh.position.z - startPosition.z) < 0.1
+    ) {
+      // Blue team wins!
+      gameOver = true;
+      winner = "blue";
+      updateGameStatusDisplay();
+      return true;
+    }
+
+    return false;
+  }
+
+  // Function to check win conditions
+  function checkWinConditions() {
+    // If game is already over, don't check again
+    if (gameOver) return;
+
+    // Check if all red dice are eliminated
+    if (redDice.length === 0 && blueDice.length > 0) {
+      gameOver = true;
+      winner = "blue";
+      updateGameStatusDisplay();
+      return;
+    }
+
+    // Check if all blue dice are eliminated
+    if (blueDice.length === 0 && redDice.length > 0) {
+      gameOver = true;
+      winner = "red";
+      updateGameStatusDisplay();
+      return;
+    }
+  }
+
   // Function to handle die movement
   function moveDie(direction: THREE.Vector3) {
-    if (isRolling || selectedDice.length === 0) return;
+    if (isRolling || selectedDice.length === 0 || gameOver) return;
 
     const activeDie = selectedDice[0];
 
@@ -734,8 +996,16 @@ document.addEventListener("DOMContentLoaded", () => {
           occupiedPositions.splice(oldIndex, 1);
         }
 
-        // Add new position to occupied list
-        occupiedPositions.push(newPosition.clone());
+        // Check for collisions with opposing dice
+        const collisionOccurred = checkCollisions(activeDie, newPosition);
+
+        // If no collision, add new position to occupied list
+        if (!collisionOccurred) {
+          occupiedPositions.push(newPosition.clone());
+        }
+
+        // Check if die captured a flag
+        checkFlagCapture(activeDie);
 
         // Update highlights
         updateHighlightedDice();
@@ -744,14 +1014,16 @@ document.addEventListener("DOMContentLoaded", () => {
         isRolling = false;
 
         // Check if any movement keys are still pressed and the die is still highest rank
-        checkContinuousMovement();
+        if (!gameOver) {
+          checkContinuousMovement();
+        }
       });
     }
   }
 
   // Function to check if continuous movement should continue
   function checkContinuousMovement() {
-    if (selectedDice.length === 0) return;
+    if (selectedDice.length === 0 || gameOver) return;
 
     const activeDie = selectedDice[0];
 
@@ -841,6 +1113,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Handle keyboard events for key down
   window.addEventListener("keydown", (event) => {
+    // Don't process new key events if game is over
+    if (gameOver) return;
+
     // Don't process new key events if cursor is moving
     if (
       isCursorMoving &&
@@ -961,9 +1236,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
         // Only allow setting values for red dice
         if (redDice.includes(activeDie)) {
-          console.log(
-            `Manually setting die value from ${activeDie.topFace} to ${digit}`
-          );
           activeDie.setTopFace(digit);
           updateHighlightedDice();
         }
@@ -996,6 +1268,9 @@ document.addEventListener("DOMContentLoaded", () => {
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
   });
+
+  // Initialize game status display
+  updateGameStatusDisplay();
 
   // Start animation loop
   animate();

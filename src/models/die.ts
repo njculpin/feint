@@ -229,7 +229,6 @@ export class Die {
 
     // Check if rolling would take the die out of bounds
     if (this.wouldGoOutOfBounds(direction, boundaryLimit)) {
-      console.log("Can't roll: would go out of bounds");
       return false;
     }
 
@@ -363,8 +362,6 @@ export class Die {
 
     // The top and bottom faces remain in the same physical position during Y-axis rotation
     // No need to update topFace since it's still the same face (orientation.top)
-
-    console.log(`Die rotated ${direction}. Top face: ${this.topFace}`);
   }
 
   // Update the orientation after rolling
@@ -409,8 +406,6 @@ export class Die {
       this.orientation.right = oldOrientation.top;
       // Front and back faces stay in the same position
     }
-
-    console.log(`Die rolled to face: ${this.topFace}`);
   }
 
   // Calculate which face is on top based on the die's rotation
