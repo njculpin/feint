@@ -219,6 +219,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Initialize cursor at a default position
   const cursorPosition = new THREE.Vector3(0, 0, 0);
+  // Target position for smooth cursor movement
+  const cursorTargetPosition = new THREE.Vector3(0, 0, 0);
   updateCursorPosition();
   scene.add(cursor);
 
@@ -227,6 +229,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Track if a die is currently rolling
   let isRolling = false;
+
+  // Track if cursor is currently moving
+  let isCursorMoving = false;
 
   // Track key states
   const keyStates: { [key: string]: boolean } = {
@@ -276,8 +281,62 @@ document.addEventListener("DOMContentLoaded", () => {
     `;
   }
 
-  // Function to move cursor
+  // Function to animate cursor movement
+  function animateCursorMovement(
+    targetX: number,
+    targetZ: number,
+    duration = 500,
+    onComplete?: () => void
+  ) {
+    // Set target position
+    cursorTargetPosition.x = targetX;
+    cursorTargetPosition.z = targetZ;
+
+    // Start cursor movement animation
+    isCursorMoving = true;
+
+    // Animation parameters
+    const startPosition = cursorPosition.clone();
+    const startTime = Date.now();
+    const endTime = startTime + duration;
+
+    // Function to perform animation step
+    const performAnimation = () => {
+      const currentTime = Date.now();
+      const elapsed = currentTime - startTime;
+
+      // If animation is complete
+      if (currentTime >= endTime) {
+        cursorPosition.copy(cursorTargetPosition);
+        updateCursorPosition();
+        isCursorMoving = false;
+        if (onComplete) onComplete();
+        return;
+      }
+
+      // Calculate progress (0 to 1)
+      const progress = elapsed / duration;
+
+      // Update cursor position using linear interpolation
+      cursorPosition.x =
+        startPosition.x + (cursorTargetPosition.x - startPosition.x) * progress;
+      cursorPosition.z =
+        startPosition.z + (cursorTargetPosition.z - startPosition.z) * progress;
+      updateCursorPosition();
+
+      // Continue animation
+      requestAnimationFrame(performAnimation);
+    };
+
+    // Start animation
+    performAnimation();
+  }
+
+  // Function to move cursor with animation
   function moveCursor(direction: THREE.Vector3) {
+    // Don't start a new movement if already moving
+    if (isCursorMoving) return;
+
     // Find dice with highest rank
     const { dice: highestDice } = findHighestRankDice();
 
@@ -433,15 +492,19 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
 
-    // If we found a die, move cursor to it and select it
+    // If we found a die, move cursor to it with animation and select it
     if (nextDie) {
-      cursorPosition.x = nextDie.mesh.position.x;
-      cursorPosition.z = nextDie.mesh.position.z;
-      updateCursorPosition();
-
-      // Select the die
-      selectedDice = [nextDie];
-      updateHighlightedDice();
+      // Animate cursor movement
+      animateCursorMovement(
+        nextDie.mesh.position.x,
+        nextDie.mesh.position.z,
+        300,
+        () => {
+          // Select the die after cursor arrives
+          selectedDice = [nextDie!];
+          updateHighlightedDice();
+        }
+      );
     }
   }
 
@@ -483,10 +546,11 @@ document.addEventListener("DOMContentLoaded", () => {
       // Update the highlight to show it's selected
       highestDice[0].highlight(true, true);
 
-      // Move cursor to the selected die
-      cursorPosition.x = highestDice[0].mesh.position.x;
-      cursorPosition.z = highestDice[0].mesh.position.z;
-      updateCursorPosition();
+      // Move cursor to the selected die with animation
+      animateCursorMovement(
+        highestDice[0].mesh.position.x,
+        highestDice[0].mesh.position.z
+      );
     }
 
     // Update info display
@@ -560,6 +624,10 @@ document.addEventListener("DOMContentLoaded", () => {
       // Set rolling flag
       isRolling = true;
 
+      // Start cursor movement simultaneously with die roll
+      // The duration matches the typical roll animation time
+      animateCursorMovement(newPosition.x, newPosition.z, 500);
+
       // Roll the die
       activeDie.roll(direction, gameBoard.boundaryLimit, () => {
         // After rolling completes, update occupied positions
@@ -575,10 +643,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
         // Add new position to occupied list
         occupiedPositions.push(newPosition.clone());
-
-        // Update cursor position
-        cursorPosition.copy(newPosition);
-        updateCursorPosition();
 
         // Update highlights
         updateHighlightedDice();
@@ -681,6 +745,17 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Handle keyboard events for key down
   window.addEventListener("keydown", (event) => {
+    // Don't process new key events if cursor is moving
+    if (
+      isCursorMoving &&
+      (event.code === "ArrowUp" ||
+        event.code === "ArrowDown" ||
+        event.code === "ArrowLeft" ||
+        event.code === "ArrowRight")
+    ) {
+      return;
+    }
+
     // Arrow keys for cursor movement
     if (event.code === "ArrowUp") {
       moveCursor(new THREE.Vector3(0, 0, -1)); // Move cursor forward
@@ -754,6 +829,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Space or Enter to select a die at cursor position
     if (event.code === "Space" || event.code === "Enter") {
+      if (isCursorMoving) return;
+
       const { dice: highestDice } = findHighestRankDice();
       const dieAtCursor = highestDice.find(
         (die) =>
