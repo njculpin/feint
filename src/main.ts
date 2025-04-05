@@ -2,6 +2,7 @@ import * as THREE from "three";
 import "./style.css";
 import { Die } from "./models/die";
 import { GameBoard } from "./models/board";
+import { Flag } from "./models/flag";
 
 // Wait for DOM to be fully loaded
 document.addEventListener("DOMContentLoaded", () => {
@@ -80,7 +81,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const startPosition = gameBoard.getStartPosition(dieSize);
 
   // Create array to store all dice
-  const dice: Die[] = [];
+  const redDice: Die[] = [];
+  const blueDice: Die[] = [];
 
   // Create array to track occupied positions
   const occupiedPositions: THREE.Vector3[] = [];
@@ -107,7 +109,7 @@ document.addEventListener("DOMContentLoaded", () => {
     );
   };
 
-  // Create and add 6 dice in adjacent positions
+  // Create and add 6 red dice in adjacent positions
   let diceCount = 0;
   const maxDice = 6;
 
@@ -116,7 +118,7 @@ document.addEventListener("DOMContentLoaded", () => {
     () => Math.random() - 0.5
   );
 
-  // Try to place dice in shuffled positions
+  // Try to place red dice in shuffled positions
   for (const offset of shuffledPositions) {
     if (diceCount >= maxDice) break;
 
@@ -134,20 +136,88 @@ document.addEventListener("DOMContentLoaded", () => {
     ) {
       // Create die with red color and a specific top face
       const faceValue = (diceCount % 6) + 1; // Assign values 1-6
-      const adjacentDie = new Die({
+      const redDie = new Die({
         size: dieSize,
         position: position,
-        color: "#ff0000", // All dice are red
+        color: "#ff0000", // Red dice
         pipColor: "#ffffff",
         initialTopFace: faceValue, // Set the initial top face
       });
 
       // Set anisotropy for better texture quality
-      adjacentDie.setAnisotropy(renderer.capabilities.getMaxAnisotropy());
+      redDie.setAnisotropy(renderer.capabilities.getMaxAnisotropy());
 
       // Add to scene and dice array
-      scene.add(adjacentDie.mesh);
-      dice.push(adjacentDie);
+      scene.add(redDie.mesh);
+      redDice.push(redDie);
+
+      // Mark position as occupied
+      occupiedPositions.push(position.clone());
+
+      // Increment dice count
+      diceCount++;
+    }
+  }
+
+  // Create a red flag on the opposite side of the board for blue dice
+  const oppositeStartPos = new THREE.Vector3(
+    -startPosition.x,
+    0,
+    -startPosition.z
+  );
+
+  // Create red flag for blue dice
+  const blueFlag = new Flag({
+    position: new THREE.Vector3(oppositeStartPos.x, 0, oppositeStartPos.z),
+    poleHeight: dieSize * 2.5,
+    poleRadius: dieSize * 0.08,
+    flagWidth: dieSize * 1.0,
+    flagHeight: dieSize * 0.6,
+    flagColor: 0xff0000, // Red flag
+    poleColor: 0x8b4513, // Brown pole
+  });
+
+  // Add the blue flag to the scene
+  blueFlag.addToScene(scene);
+
+  // Add opposite start position to occupied positions
+  occupiedPositions.push(oppositeStartPos.clone());
+
+  // Create and add 6 blue dice in adjacent positions to the opposite flag
+  diceCount = 0;
+
+  // Try to place blue dice in shuffled positions around the opposite flag
+  for (const offset of shuffledPositions) {
+    if (diceCount >= maxDice) break;
+
+    // Calculate absolute position (mirrored from red dice)
+    const position = new THREE.Vector3(
+      oppositeStartPos.x + offset.x,
+      dieSize / 2, // Keep y position at half the die height
+      oppositeStartPos.z + offset.z
+    );
+
+    // Check if position is within board boundaries and not occupied
+    if (
+      gameBoard.isWithinBoundaries(position) &&
+      !isPositionOccupied(position)
+    ) {
+      // Create die with blue color and a specific top face
+      const faceValue = (diceCount % 6) + 1; // Assign values 1-6
+      const blueDie = new Die({
+        size: dieSize,
+        position: position,
+        color: "#0066ff", // Blue dice
+        pipColor: "#ffffff",
+        initialTopFace: faceValue, // Set the initial top face
+      });
+
+      // Set anisotropy for better texture quality
+      blueDie.setAnisotropy(renderer.capabilities.getMaxAnisotropy());
+
+      // Add to scene and dice array
+      scene.add(blueDie.mesh);
+      blueDice.push(blueDie);
 
       // Mark position as occupied
       occupiedPositions.push(position.clone());
@@ -158,7 +228,11 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // Make sure all dice have their top face calculated correctly
-  dice.forEach((die) => {
+  redDice.forEach((die) => {
+    die.updateTopFaceFromRotation();
+  });
+
+  blueDice.forEach((die) => {
     die.updateTopFaceFromRotation();
   });
 
@@ -249,20 +323,27 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Function to update info display
   function updateInfoDisplay() {
-    // Get all dice top faces for debugging
-    const allDiceFaces = dice
-      .map((die) => `Die ${dice.indexOf(die) + 1}: ${die.topFace}`)
+    // Get all red dice top faces for debugging
+    const redDiceFaces = redDice
+      .map((die) => `Red Die ${redDice.indexOf(die) + 1}: ${die.topFace}`)
       .join("<br>");
 
-    // Get the highest rank
+    // Get all blue dice top faces for debugging
+    const blueDiceFaces = blueDice
+      .map((die) => `Blue Die ${blueDice.indexOf(die) + 1}: ${die.topFace}`)
+      .join("<br>");
+
+    // Get the highest rank among red dice
     const { rank } = findHighestRankDice();
 
     if (selectedDice.length === 0) {
       infoDisplay.innerHTML = `
         <strong>Game Status</strong><br>
-        Highest Face: ${rank}<br>
+        Highest Red Die Face: ${rank}<br>
         <br>
-        ${allDiceFaces}<br>
+        ${redDiceFaces}<br>
+        <br>
+        ${blueDiceFaces}<br>
         <br>
         No die selected
       `;
@@ -272,9 +353,11 @@ document.addEventListener("DOMContentLoaded", () => {
     const activeDie = selectedDice[0];
     infoDisplay.innerHTML = `
       <strong>Game Status</strong><br>
-      Highest Face: ${rank}<br>
+      Highest Red Die Face: ${rank}<br>
       <br>
-      ${allDiceFaces}<br>
+      ${redDiceFaces}<br>
+      <br>
+      ${blueDiceFaces}<br>
       <br>
       <strong>Selected Die</strong><br>
       Top Face: ${activeDie.topFace}
@@ -337,7 +420,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Don't start a new movement if already moving
     if (isCursorMoving) return;
 
-    // Find dice with highest rank
+    // Find red dice with highest rank
     const { dice: highestDice } = findHighestRankDice();
 
     // If no highest dice, don't move cursor
@@ -508,32 +591,34 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // Function to find all dice with the highest rank
+  // Function to find all red dice with the highest rank
   const findHighestRankDice = (): { dice: Die[]; rank: number } => {
     let highestRank = 0;
 
-    // First find the highest rank among all dice
-    dice.forEach((die) => {
+    // First find the highest rank among red dice only
+    redDice.forEach((die) => {
       if (die.topFace > highestRank) {
         highestRank = die.topFace;
       }
     });
 
-    // Then collect all dice with that rank
-    const highestDice = dice.filter((die) => die.topFace === highestRank);
+    // Then collect all red dice with that rank
+    const highestDice = redDice.filter((die) => die.topFace === highestRank);
 
     return { dice: highestDice, rank: highestRank };
   };
 
   // Update which dice are highlighted
   const updateHighlightedDice = (): void => {
-    // Find dice with highest rank
+    // Find red dice with highest rank
     const { dice: highestDice } = findHighestRankDice();
 
     // Unhighlight all dice
-    dice.forEach((die) => die.highlight(false));
+    redDice.forEach((die) => die.highlight(false));
+    // Blue dice are never highlighted or selectable
+    blueDice.forEach((die) => die.highlight(false));
 
-    // Highlight highest-ranked dice with appropriate colors
+    // Highlight highest-ranked red dice with appropriate colors
     highestDice.forEach((die) => {
       // If this die is in the selected dice array, highlight it as selected (yellow)
       // Otherwise, highlight it as movable but not selected (orange)
@@ -594,7 +679,7 @@ document.addEventListener("DOMContentLoaded", () => {
     );
   };
 
-  // Function to check if a die is among the highest rank dice
+  // Function to check if a die is among the highest rank red dice
   const isHighestRankDie = (die: Die): boolean => {
     const { dice: highestDice } = findHighestRankDice();
     return highestDice.includes(die);
@@ -605,6 +690,14 @@ document.addEventListener("DOMContentLoaded", () => {
     if (isRolling || selectedDice.length === 0) return;
 
     const activeDie = selectedDice[0];
+
+    // Check if the die is a red die (only red dice can be controlled)
+    if (!redDice.includes(activeDie)) {
+      // If not a red die, deselect it and update highlighted dice
+      selectedDice = [];
+      updateHighlightedDice();
+      return;
+    }
 
     // Check if the die is still among the highest rank
     if (!isHighestRankDie(activeDie)) {
@@ -661,6 +754,9 @@ document.addEventListener("DOMContentLoaded", () => {
     if (selectedDice.length === 0) return;
 
     const activeDie = selectedDice[0];
+
+    // Only continue if the die is a red die
+    if (!redDice.includes(activeDie)) return;
 
     // Only continue if the die is still highest rank
     if (!isHighestRankDie(activeDie)) return;
@@ -802,6 +898,14 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!isRolling && selectedDice.length > 0) {
         const activeDie = selectedDice[0];
 
+        // Check if the die is a red die (only red dice can be controlled)
+        if (!redDice.includes(activeDie)) {
+          // If not a red die, deselect it and update highlighted dice
+          selectedDice = [];
+          updateHighlightedDice();
+          return;
+        }
+
         // Check if the die is still among the highest rank
         if (!isHighestRankDie(activeDie)) {
           updateHighlightedDice();
@@ -853,13 +957,16 @@ document.addEventListener("DOMContentLoaded", () => {
     if (event.code.startsWith("Digit") && selectedDice.length > 0) {
       const digit = Number.parseInt(event.code.replace("Digit", ""));
       if (digit >= 1 && digit <= 6) {
-        selectedDice.forEach((die) => {
+        const activeDie = selectedDice[0];
+
+        // Only allow setting values for red dice
+        if (redDice.includes(activeDie)) {
           console.log(
-            `Manually setting die value from ${die.topFace} to ${digit}`
+            `Manually setting die value from ${activeDie.topFace} to ${digit}`
           );
-          die.setTopFace(digit);
-        });
-        updateHighlightedDice();
+          activeDie.setTopFace(digit);
+          updateHighlightedDice();
+        }
       }
     }
   });

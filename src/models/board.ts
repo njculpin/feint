@@ -15,6 +15,7 @@ export class GameBoard {
   border: THREE.LineSegments;
   gridHelper: THREE.GridHelper;
   startFlag: Flag;
+  endFlag: Flag;
   cellSize: number;
   gridSize: number;
   boardSize: number;
@@ -48,6 +49,17 @@ export class GameBoard {
       flagWidth: this.cellSize * 1.0, // Flag as wide as a cell
       flagHeight: this.cellSize * 0.6, // Flag 60% as tall as a cell
       flagColor: 0x0066ff, // Blue flag
+      poleColor: 0x8b4513, // Brown pole
+    });
+
+    const endPos = this.getEndPosition(this.cellSize);
+    this.endFlag = new Flag({
+      position: new THREE.Vector3(endPos.x, 0, endPos.z),
+      poleHeight: this.cellSize * 2.5, // Much taller pole (2.5x the cell size)
+      poleRadius: this.cellSize * 0.08, // Much thicker pole (8% of cell size)
+      flagWidth: this.cellSize * 1.0, // Flag as wide as a cell
+      flagHeight: this.cellSize * 0.6, // Flag 60% as tall as a cell
+      flagColor: 0xff0000, // Red flag
       poleColor: 0x8b4513, // Brown pole
     });
   }
@@ -105,6 +117,12 @@ export class GameBoard {
   getStartPosition(dieSize: number): THREE.Vector3 {
     const startX = 0; // Middle column
     const startZ = (this.gridSize / 2 - 1) * this.cellSize; // One cell in from the edge closest to the camera
+    return new THREE.Vector3(startX, dieSize / 2, startZ);
+  }
+
+  getEndPosition(dieSize: number): THREE.Vector3 {
+    const startX = 0;
+    const startZ = 0;
     return new THREE.Vector3(startX, dieSize / 2, startZ);
   }
 
