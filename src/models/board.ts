@@ -29,7 +29,6 @@ export class GameBoard {
     const color = options.color || 0x222222;
     const borderColor = options.borderColor || 0x444444;
     const gridColor = options.gridColor || 0x444444;
-    const startMarkerColor = options.startMarkerColor || 0x0066ff; // Changed to blue
 
     // Create table plane
     this.tablePlane = this.createTablePlane(color);

@@ -5,6 +5,7 @@ export interface DieOptions {
   position?: THREE.Vector3;
   color?: string | number;
   pipColor?: string | number;
+  initialTopFace?: number;
 }
 
 export class Die {
@@ -38,6 +39,41 @@ export class Die {
     this.mesh = new THREE.Mesh(geometry, materials);
     this.mesh.position.copy(position);
     this.mesh.rotation.set(0, 0, 0); // This will have the "2" face up
+
+    // If an initial top face is specified, rotate the die to show that face
+    if (options.initialTopFace !== undefined) {
+      this.setTopFace(options.initialTopFace);
+    }
+  }
+
+  // Set the top face by rotating the die appropriately
+  setTopFace(faceValue: number): void {
+    // Reset rotation first
+    this.mesh.rotation.set(0, 0, 0);
+
+    // Apply rotation based on desired top face
+    switch (faceValue) {
+      case 1: // Right face becomes top
+        this.mesh.rotateZ(Math.PI / 2);
+        break;
+      case 2: // Already top, no rotation needed
+        break;
+      case 3: // Front face becomes top
+        this.mesh.rotateX(-Math.PI / 2);
+        break;
+      case 4: // Back face becomes top
+        this.mesh.rotateX(Math.PI / 2);
+        break;
+      case 5: // Bottom face becomes top
+        this.mesh.rotateX(Math.PI);
+        break;
+      case 6: // Left face becomes top
+        this.mesh.rotateZ(-Math.PI / 2);
+        break;
+    }
+
+    // Update the orientation and top face
+    this.updateTopFaceFromRotation();
   }
 
   // Create dice face textures
@@ -112,6 +148,17 @@ export class Die {
       );
       context.fill();
     });
+
+    // Add the face number as text in the corner
+    context.font = "bold 72px Arial";
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    context.fillStyle = "black";
+    context.fillText(
+      number.toString(),
+      canvas.width * 0.85,
+      canvas.height * 0.15
+    );
 
     const texture = new THREE.CanvasTexture(canvas);
     texture.needsUpdate = true;
@@ -202,7 +249,6 @@ export class Die {
     const rollSpeed = 3; // Degrees per frame
 
     this.isRolling = true;
-    const oldOrientation = { ...this.orientation };
 
     const animateRoll = () => {
       if (remainingAngle <= 0) {
@@ -217,6 +263,9 @@ export class Die {
 
         // Update the orientation based on the direction of roll
         this.updateOrientationAfterRoll(direction);
+
+        // Calculate which face is now on top
+        this.updateTopFaceFromRotation();
 
         if (onComplete) onComplete();
         return;
@@ -245,7 +294,80 @@ export class Die {
     return true;
   }
 
-  // Update the orientation after rolling in a direction
+  // Rotate the die in place
+  rotateInPlace(direction: "left" | "right", onComplete?: () => void): boolean {
+    if (this.isRolling) return false;
+
+    this.isRolling = true;
+
+    // Always use world Y axis for rotation relative to camera
+    const worldYAxis = new THREE.Vector3(0, 1, 0);
+
+    // Calculate rotation angle in radians (90 degrees)
+    const rotationAngle = ((direction === "left" ? 1 : -1) * Math.PI) / 2;
+
+    // Start the rotation animation
+    let remainingAngle = Math.abs(rotationAngle);
+    const rotationSpeed = 0.1; // Radians per frame
+
+    const animateRotation = () => {
+      if (remainingAngle <= 0) {
+        this.isRolling = false;
+
+        // Update the orientation based on the direction of rotation
+        this.updateOrientationAfterRotation(direction);
+
+        // Calculate which face is now on top
+        this.updateTopFaceFromRotation();
+
+        if (onComplete) onComplete();
+        return;
+      }
+
+      const angleToRotate = Math.min(rotationSpeed, remainingAngle);
+      remainingAngle -= angleToRotate;
+
+      // Apply rotation around the world Y axis (always relative to camera)
+      this.mesh.rotateOnWorldAxis(
+        worldYAxis,
+        direction === "left" ? angleToRotate : -angleToRotate
+      );
+
+      requestAnimationFrame(animateRotation);
+    };
+
+    animateRotation();
+    return true;
+  }
+
+  // Update the orientation after rotating in place
+  private updateOrientationAfterRotation(direction: "left" | "right"): void {
+    // Create a temporary copy of the current orientation
+    const oldOrientation = { ...this.orientation };
+
+    if (direction === "left") {
+      // Left rotation (Q key) - counterclockwise when viewed from above
+      // Front becomes right, right becomes back, back becomes left, left becomes front
+      this.orientation.front = oldOrientation.right;
+      this.orientation.right = oldOrientation.back;
+      this.orientation.back = oldOrientation.left;
+      this.orientation.left = oldOrientation.front;
+    } else {
+      // Right rotation (E key) - clockwise when viewed from above
+      // Front becomes left, left becomes back, back becomes right, right becomes front
+      this.orientation.front = oldOrientation.left;
+      this.orientation.left = oldOrientation.back;
+      this.orientation.back = oldOrientation.right;
+      this.orientation.right = oldOrientation.front;
+    }
+
+    // The top and bottom faces remain in the same physical position during Y-axis rotation
+    // No need to update topFace since it's still the same face (orientation.top)
+
+    console.log(`Die rotated ${direction}. Top face: ${this.topFace}`);
+  }
+
+  // Update the orientation after rolling
   private updateOrientationAfterRoll(direction: THREE.Vector3): void {
     // Create a temporary copy of the current orientation
     const oldOrientation = { ...this.orientation };
@@ -288,24 +410,83 @@ export class Die {
       // Front and back faces stay in the same position
     }
 
-    // Update the topFace property to match the orientation
-    this.topFace = this.orientation.top;
-
     console.log(`Die rolled to face: ${this.topFace}`);
   }
 
-  // Highlight this die (make it glow or raise it)
-  highlight(isHighlighted = true): void {
+  // Calculate which face is on top based on the die's rotation
+  updateTopFaceFromRotation(): void {
+    // Get the die's rotation matrix
+    const matrix = new THREE.Matrix4();
+    this.mesh.updateMatrixWorld();
+    matrix.extractRotation(this.mesh.matrixWorld);
+
+    // The Y+ direction in object space
+    const objUp = new THREE.Vector3(0, 1, 0);
+
+    // Transform to world space
+    objUp.applyMatrix4(matrix);
+
+    // Find which face normal is most aligned with world up
+    const worldUp = new THREE.Vector3(0, 1, 0);
+
+    // Face normals in object space
+    const faceNormals = [
+      new THREE.Vector3(1, 0, 0), // Right (1)
+      new THREE.Vector3(-1, 0, 0), // Left (6)
+      new THREE.Vector3(0, 1, 0), // Top (2)
+      new THREE.Vector3(0, -1, 0), // Bottom (5)
+      new THREE.Vector3(0, 0, 1), // Front (3)
+      new THREE.Vector3(0, 0, -1), // Back (4)
+    ];
+
+    // Face values corresponding to the normals
+    const faceValues = [1, 6, 2, 5, 3, 4];
+
+    // Find which face is most aligned with world up
+    let maxAlignment = Number.NEGATIVE_INFINITY;
+    let topFaceIndex = -1;
+
+    for (let i = 0; i < faceNormals.length; i++) {
+      // Transform normal to world space
+      const normal = faceNormals[i].clone();
+      normal.applyMatrix4(matrix);
+
+      // Calculate alignment with world up (dot product)
+      const alignment = normal.dot(worldUp);
+
+      if (alignment > maxAlignment) {
+        maxAlignment = alignment;
+        topFaceIndex = i;
+      }
+    }
+
+    // Update top face
+    if (topFaceIndex !== -1) {
+      this.topFace = faceValues[topFaceIndex];
+      this.orientation.top = this.topFace;
+      this.orientation.bottom = 7 - this.topFace; // Opposite face
+    }
+  }
+
+  // Highlight this die with a specific color
+  highlight(isHighlighted = true, isSelected = false): void {
+    const materials = this.mesh.material as THREE.MeshStandardMaterial[];
+
     if (isHighlighted) {
-      // Add a glow effect by making the die slightly emissive
-      const materials = this.mesh.material as THREE.MeshStandardMaterial[];
+      // Choose color based on whether the die is selected or just movable
+      const highlightColor = isSelected
+        ? new THREE.Color(0xffff00) // Yellow for selected die
+        : new THREE.Color(0xff8800); // Orange for movable but unselected dice
+
+      const intensity = isSelected ? 0.3 : 0.2; // Slightly less intense for unselected
+
+      // Apply the glow effect
       materials.forEach((material) => {
-        material.emissive = new THREE.Color(0xffff00); // Yellow glow
-        material.emissiveIntensity = 0.3;
+        material.emissive = highlightColor;
+        material.emissiveIntensity = intensity;
       });
     } else {
       // Remove glow
-      const materials = this.mesh.material as THREE.MeshStandardMaterial[];
       materials.forEach((material) => {
         material.emissive = new THREE.Color(0x000000);
         material.emissiveIntensity = 0;
