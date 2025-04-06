@@ -44,7 +44,7 @@ export class GameBoard {
     const startPos = this.getStartPosition(this.cellSize);
     this.startFlag = new Flag({
       position: new THREE.Vector3(startPos.x, 0, startPos.z),
-      poleHeight: this.cellSize * 2.5, // Much taller pole (2.5x the cell size)
+      poleHeight: this.cellSize * 2, // Much taller pole (2.5x the cell size)
       poleRadius: this.cellSize * 0.08, // Much thicker pole (8% of cell size)
       flagWidth: this.cellSize * 1.0, // Flag as wide as a cell
       flagHeight: this.cellSize * 0.6, // Flag 60% as tall as a cell
@@ -55,7 +55,7 @@ export class GameBoard {
     const endPos = this.getEndPosition(this.cellSize);
     this.endFlag = new Flag({
       position: new THREE.Vector3(endPos.x, 0, endPos.z),
-      poleHeight: this.cellSize * 2.5, // Much taller pole (2.5x the cell size)
+      poleHeight: this.cellSize * 2, // Much taller pole (2.5x the cell size)
       poleRadius: this.cellSize * 0.08, // Much thicker pole (8% of cell size)
       flagWidth: this.cellSize * 1.0, // Flag as wide as a cell
       flagHeight: this.cellSize * 0.6, // Flag 60% as tall as a cell
@@ -68,7 +68,7 @@ export class GameBoard {
     const tablePlane = new THREE.Mesh(
       new THREE.PlaneGeometry(this.boardSize, this.boardSize),
       new THREE.MeshStandardMaterial({
-        color: color,
+        color: 0x333333, // Slightly lighter gray for better contrast
         roughness: 0.8,
         metalness: 0.2,
       })

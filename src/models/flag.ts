@@ -17,7 +17,7 @@ export class Flag {
   constructor(options: FlagOptions = {}) {
     // Set default values
     this.position = options.position || new THREE.Vector3(0, 0, 0);
-    const poleHeight = options.poleHeight || 4.0; // Even taller pole
+    const poleHeight = options.poleHeight || 2.0; // Even taller pole
     const poleRadius = options.poleRadius || 0.15; // Much thicker pole
     const flagWidth = options.flagWidth || 2.0; // Much wider flag
     const flagHeight = options.flagHeight || 1.2; // Much taller flag

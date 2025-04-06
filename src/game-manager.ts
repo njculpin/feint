@@ -24,6 +24,8 @@ export class GameManager {
   public startPosition: THREE.Vector3;
   public oppositeStartPos: THREE.Vector3;
   public blueFlag: Flag;
+  public redFlag: Flag;
+  private pendingDiceMovements = 0;
 
   constructor(options: GameManagerOptions) {
     this.scene = options.scene;
@@ -52,7 +54,15 @@ export class GameManager {
       -this.startPosition.z
     );
 
-    // Create red flag for blue dice
+    // Remove the gameBoard.startFlag and endFlag from the scene if they exist
+    if (this.gameBoard.startFlag) {
+      this.gameBoard.startFlag.removeFromScene(this.scene);
+    }
+    if (this.gameBoard.endFlag) {
+      this.gameBoard.endFlag.removeFromScene(this.scene);
+    }
+
+    // Create blue flag for blue dice at the opposite start position
     this.blueFlag = new Flag({
       position: new THREE.Vector3(
         this.oppositeStartPos.x,
@@ -63,12 +73,30 @@ export class GameManager {
       poleRadius: options.dieSize * 0.08,
       flagWidth: options.dieSize * 1.0,
       flagHeight: options.dieSize * 0.6,
-      flagColor: 0xff0000, // Red flag
+      flagColor: 0x0066ff, // Blue flag for blue dice
       poleColor: 0x8b4513, // Brown pole
     });
 
     // Add the blue flag to the scene
     this.blueFlag.addToScene(this.scene);
+
+    // Add a red flag for red dice at the start position
+    this.redFlag = new Flag({
+      position: new THREE.Vector3(
+        this.startPosition.x,
+        0,
+        this.startPosition.z
+      ),
+      poleHeight: options.dieSize * 2.5,
+      poleRadius: options.dieSize * 0.08,
+      flagWidth: options.dieSize * 1.0,
+      flagHeight: options.dieSize * 0.6,
+      flagColor: 0xff0000, // Red flag for red dice
+      poleColor: 0x8b4513, // Brown pole
+    });
+
+    // Add the red flag to the scene
+    this.redFlag.addToScene(this.scene);
 
     // Initialize the game
     this.initializeGame(options.dieSize);
@@ -191,27 +219,73 @@ export class GameManager {
     return highestDice.includes(die);
   }
 
-  public updateHighlightedDice(): void {
+  // Update the updateHighlightedDice method to handle multiple selected dice
+  public updateHighlightedDice(cursorPosition?: THREE.Vector3): void {
     // Find red dice with highest rank
     const { dice: highestDice } = this.findHighestRankDice();
 
-    // Unhighlight all dice
-    this.redDice.forEach((die) => die.highlight(false));
-    // Blue dice are never highlighted or selectable
-    this.blueDice.forEach((die) => die.highlight(false));
+    // Unhighlight all dice first
+    this.redDice.forEach((die) => die.highlight(false, false));
+    this.blueDice.forEach((die) => die.highlight(false, false));
 
-    // Highlight highest-ranked red dice with appropriate colors
+    // Highlight highest-ranked red dice
     highestDice.forEach((die) => {
       // If this die is in the selected dice array, highlight it as selected (yellow)
       // Otherwise, highlight it as movable but not selected (orange)
-      die.highlight(true, this.selectedDice.includes(die));
+      const isSelected = this.selectedDice.includes(die);
+      die.highlight(true, isSelected);
     });
 
-    // If there's only one highest die and no dice are selected, auto-select it
-    if (highestDice.length === 1 && this.selectedDice.length === 0) {
-      this.selectedDice[0] = highestDice[0];
-      // Update the highlight to show it's selected
-      highestDice[0].highlight(true, true);
+    // Check if any of the currently selected dice are still in the highest rank list
+    const anySelectedDiceStillValid = this.selectedDice.some((die) =>
+      highestDice.includes(die)
+    );
+
+    // If none of the selected dice are valid anymore, or if there are no selected dice
+    if (!anySelectedDiceStillValid) {
+      // Clear the current selection
+      this.selectedDice.length = 0;
+
+      // If we have a cursor position, find the nearest highest-rank die
+      if (cursorPosition && highestDice.length > 0) {
+        let nearestDie = highestDice[0];
+        let minDistance = Number.POSITIVE_INFINITY;
+
+        // Find the nearest die to the cursor position
+        highestDice.forEach((die) => {
+          const distance = new THREE.Vector3(
+            die.mesh.position.x - cursorPosition.x,
+            0,
+            die.mesh.position.z - cursorPosition.z
+          ).length();
+
+          if (distance < minDistance) {
+            minDistance = distance;
+            nearestDie = die;
+          }
+        });
+
+        // Select the nearest die
+        this.selectedDice[0] = nearestDie;
+      }
+      // If no cursor position provided or no highest dice, select the first highest die if available
+      else if (highestDice.length > 0) {
+        this.selectedDice[0] = highestDice[0];
+      }
+
+      // Update the highlight to show the new selection
+      if (this.selectedDice.length > 0) {
+        this.selectedDice[0].highlight(true, true);
+      }
+    } else {
+      // Ensure all selected dice are actually highest rank dice
+      // Remove any selected dice that aren't highest rank
+      for (let i = this.selectedDice.length - 1; i >= 0; i--) {
+        const die = this.selectedDice[i];
+        if (!highestDice.includes(die)) {
+          this.selectedDice.splice(i, 1);
+        }
+      }
     }
   }
 
@@ -355,7 +429,10 @@ export class GameManager {
 
     // If die was selected, deselect it
     if (this.selectedDice.includes(die)) {
-      this.selectedDice.length = 0;
+      const selectedIndex = this.selectedDice.indexOf(die);
+      if (selectedIndex !== -1) {
+        this.selectedDice.splice(selectedIndex, 1);
+      }
     }
 
     // Check for win conditions
@@ -408,7 +485,7 @@ export class GameManager {
 
         // Remove the active die
         this.scene.remove(activeDie.mesh);
-        const activeDiceArray = isRedDie ? this.redDice : this.blueDice;
+        const activeDiceArray = isRedDie ? this.redDice : this.redDice;
         const activeIndex = activeDiceArray.indexOf(activeDie);
         if (activeIndex !== -1) {
           activeDiceArray.splice(activeIndex, 1);
@@ -416,7 +493,10 @@ export class GameManager {
 
         // If active die was selected, deselect it
         if (this.selectedDice.includes(activeDie)) {
-          this.selectedDice.length = 0;
+          const selectedIndex = this.selectedDice.indexOf(activeDie);
+          if (selectedIndex !== -1) {
+            this.selectedDice.splice(selectedIndex, 1);
+          }
         }
 
         // Check for win conditions
@@ -506,6 +586,7 @@ export class GameManager {
     }
   }
 
+  // Update the moveDie method to move all selected dice with better synchronization
   public moveDie(
     direction: THREE.Vector3,
     animateCursorMovement?: (
@@ -518,83 +599,129 @@ export class GameManager {
     if (this.isRolling || this.selectedDice.length === 0 || this.gameOver)
       return;
 
-    const activeDie = this.selectedDice[0];
+    // Filter selected dice to only include red dice with highest rank
+    const validSelectedDice = this.selectedDice.filter(
+      (die) => this.redDice.includes(die) && this.isHighestRankDie(die)
+    );
 
-    // Check if the die is a red die (only red dice can be controlled)
-    if (!this.redDice.includes(activeDie)) {
-      // If not a red die, deselect it and update highlighted dice
-      this.selectedDice.length = 0;
+    if (validSelectedDice.length === 0) {
+      // No valid dice selected, update highlighted dice and return
+      this.selectedDice = [];
       this.updateHighlightedDice();
       return;
     }
 
-    // Check if the die is still among the highest rank
-    if (!this.isHighestRankDie(activeDie)) {
-      // If not, update highlighted dice and return
-      this.updateHighlightedDice();
+    // Check if all selected dice can move in the given direction
+    const canAllMove = validSelectedDice.every((die) =>
+      this.canDieMove(die, direction)
+    );
+
+    if (!canAllMove) {
+      // If any die can't move, don't move any
       return;
     }
 
-    // Check if the die can move in the given direction
-    if (this.canDieMove(activeDie, direction)) {
-      // Calculate new position
-      const oldPosition = activeDie.mesh.position.clone();
-      const newPosition = oldPosition
-        .clone()
-        .add(direction.clone().multiplyScalar(activeDie.size));
+    // Set rolling flag
+    this.isRolling = true;
 
-      // Set rolling flag
-      this.isRolling = true;
+    // Store old positions for all dice
+    const oldPositions = validSelectedDice.map((die) =>
+      die.mesh.position.clone()
+    );
 
-      // Move cursor with die if animateCursorMovement is provided
-      if (animateCursorMovement) {
-        animateCursorMovement(newPosition.x, newPosition.z, 500);
-      }
+    // Calculate new positions for all dice
+    const newPositions = validSelectedDice.map((die) =>
+      die.mesh.position.clone().add(direction.clone().multiplyScalar(die.size))
+    );
 
-      // Roll the die
-      activeDie.roll(direction, this.gameBoard.boundaryLimit, () => {
-        // After rolling completes, update occupied positions
+    // Store the current cursor position for later use
+    const currentCursorPosition =
+      validSelectedDice.length > 0
+        ? new THREE.Vector3(
+            validSelectedDice[0].mesh.position.x,
+            0,
+            validSelectedDice[0].mesh.position.z
+          )
+        : null;
+
+    // Move cursor with the first die if animateCursorMovement is provided
+    if (animateCursorMovement && validSelectedDice.length > 0) {
+      // Use a shorter animation duration for better responsiveness
+      // Pass the exact new position of the first die
+      animateCursorMovement(newPositions[0].x, newPositions[0].z, 300);
+    }
+
+    // Track dice that need to be removed from selection due to collisions
+    const diceToRemove: Die[] = [];
+
+    // Reset pending movements counter
+    this.pendingDiceMovements = validSelectedDice.length;
+
+    // Roll all dice
+    validSelectedDice.forEach((die, index) => {
+      die.roll(direction, this.gameBoard.boundaryLimit, () => {
+        // After rolling completes for each die
+
         // Remove old position from occupied list
         const oldIndex = this.occupiedPositions.findIndex(
           (pos) =>
-            Math.abs(pos.x - oldPosition.x) < 0.1 &&
-            Math.abs(pos.z - oldPosition.z) < 0.1
+            Math.abs(pos.x - oldPositions[index].x) < 0.1 &&
+            Math.abs(pos.z - oldPositions[index].z) < 0.1
         );
         if (oldIndex !== -1) {
           this.occupiedPositions.splice(oldIndex, 1);
         }
 
         // Check for collisions with opposing dice
-        const collisionOccurred = this.checkCollisions(activeDie, newPosition);
+        const collisionOccurred = this.checkCollisions(
+          die,
+          newPositions[index]
+        );
 
         // If no collision, add new position to occupied list and check for flag capture
         if (!collisionOccurred) {
-          this.occupiedPositions.push(newPosition.clone());
+          this.occupiedPositions.push(newPositions[index].clone());
 
           // Check if die captured a flag
-          this.checkFlagCapture(activeDie);
+          this.checkFlagCapture(die);
+        } else {
+          // If collision occurred, mark this die for removal from selection
+          diceToRemove.push(die);
         }
 
-        // Update highlights - this will auto-select a new die if needed
-        this.updateHighlightedDice();
+        // Decrement pending movements counter
+        this.pendingDiceMovements--;
 
-        // If the active die was removed and we have a new selected die, move cursor to it
-        if (
-          collisionOccurred &&
-          this.selectedDice.length > 0 &&
-          animateCursorMovement
-        ) {
-          animateCursorMovement(
-            this.selectedDice[0].mesh.position.x,
-            this.selectedDice[0].mesh.position.z,
-            300
-          );
+        // If all dice have completed their moves
+        if (this.pendingDiceMovements === 0) {
+          // Remove dice that had collisions from selection
+          diceToRemove.forEach((dieToRemove) => {
+            const index = this.selectedDice.indexOf(dieToRemove);
+            if (index !== -1) {
+              this.selectedDice.splice(index, 1);
+            }
+          });
+
+          // Update highlights - this will auto-select a new die if needed
+          // Pass the last known cursor position to help find the nearest die
+          this.updateHighlightedDice(currentCursorPosition || newPositions[0]);
+
+          // If animateCursorMovement is provided and we have a new selection
+          if (animateCursorMovement && this.selectedDice.length > 0) {
+            // Move cursor to the newly selected die
+            const newSelectedDie = this.selectedDice[0];
+            animateCursorMovement(
+              newSelectedDie.mesh.position.x,
+              newSelectedDie.mesh.position.z,
+              300
+            );
+          }
+
+          // Reset rolling flag
+          this.isRolling = false;
         }
-
-        // Reset rolling flag
-        this.isRolling = false;
       });
-    }
+    });
   }
 
   public checkContinuousMovement(
@@ -606,15 +733,15 @@ export class GameManager {
       onComplete?: () => void
     ) => void
   ) {
-    if (this.selectedDice.length === 0 || this.gameOver) return;
+    if (this.selectedDice.length === 0 || this.gameOver || this.isRolling)
+      return;
 
-    const activeDie = this.selectedDice[0];
+    // Check if all selected dice are red and highest rank
+    const allValidDice = this.selectedDice.every(
+      (die) => this.redDice.includes(die) && this.isHighestRankDie(die)
+    );
 
-    // Only continue if the die is a red die
-    if (!this.redDice.includes(activeDie)) return;
-
-    // Only continue if the die is still highest rank
-    if (!this.isHighestRankDie(activeDie)) return;
+    if (!allValidDice) return;
 
     // Check which movement key is pressed
     let direction: THREE.Vector3 | null = null;

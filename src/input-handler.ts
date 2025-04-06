@@ -15,7 +15,7 @@ export interface InputHandlerOptions {
     position: THREE.Vector3;
     targetPosition: THREE.Vector3;
     updatePosition: () => void;
-    mesh: THREE.Object3D;
+    mesh: THREE.Object3D | null;
   };
   dice: {
     redDice: Die[];
@@ -24,7 +24,7 @@ export interface InputHandlerOptions {
     isRolling: boolean;
     findHighestRankDice: () => { dice: Die[]; rank: number };
     isHighestRankDie: (die: Die) => boolean;
-    updateHighlightedDice: () => void;
+    updateHighlightedDice: (cursorPosition?: THREE.Vector3) => void;
     moveDie: (
       direction: THREE.Vector3,
       animateCursorMovement?: (
@@ -59,7 +59,7 @@ export class InputHandler {
     position: THREE.Vector3;
     targetPosition: THREE.Vector3;
     updatePosition: () => void;
-    mesh: THREE.Object3D;
+    mesh: THREE.Object3D | null;
   };
   private dice: {
     redDice: Die[];
@@ -68,7 +68,7 @@ export class InputHandler {
     isRolling: boolean;
     findHighestRankDice: () => { dice: Die[]; rank: number };
     isHighestRankDie: (die: Die) => boolean;
-    updateHighlightedDice: () => void;
+    updateHighlightedDice: (cursorPosition?: THREE.Vector3) => void;
     moveDie: (
       direction: THREE.Vector3,
       animateCursorMovement?: (
@@ -104,6 +104,15 @@ export class InputHandler {
     KeyD: false,
   };
 
+  // Add raycaster and mouse properties
+  private raycaster: THREE.Raycaster;
+  private mouse: THREE.Vector2;
+  private isCtrlPressed = false;
+  private clickCooldown = false;
+
+  // Add mouse click handling to the InputHandler class
+
+  // Update the constructor to include raycaster for mouse picking
   constructor(options: InputHandlerOptions) {
     this.camera = options.camera;
     this.initialCameraPosition = options.initialCameraPosition;
@@ -116,9 +125,14 @@ export class InputHandler {
     this.state = options.state;
     this.animateCursorMovement = options.animateCursorMovement;
 
+    // Initialize raycaster for mouse picking
+    this.raycaster = new THREE.Raycaster();
+    this.mouse = new THREE.Vector2();
+
     this.setupEventListeners();
   }
 
+  // Update setupEventListeners to include mouse click and ctrl key detection
   private setupEventListeners() {
     // Handle mouse events for panning
     this.container.addEventListener("contextmenu", this.onContextMenu);
@@ -126,17 +140,22 @@ export class InputHandler {
     window.addEventListener("mouseup", this.onMouseUp);
     window.addEventListener("mousemove", this.onMouseMove);
 
+    // Add click event for die selection
+    this.container.addEventListener("click", this.onClick);
+
     // Handle keyboard events
     window.addEventListener("keydown", this.onKeyDown);
     window.addEventListener("keyup", this.onKeyUp);
   }
 
+  // Update cleanup to remove new event listeners
   public cleanup() {
     // Remove event listeners when no longer needed
     this.container.removeEventListener("contextmenu", this.onContextMenu);
     this.container.removeEventListener("mousedown", this.onMouseDown);
     window.removeEventListener("mouseup", this.onMouseUp);
     window.removeEventListener("mousemove", this.onMouseMove);
+    this.container.removeEventListener("click", this.onClick);
     window.removeEventListener("keydown", this.onKeyDown);
     window.removeEventListener("keyup", this.onKeyUp);
   }
@@ -187,7 +206,96 @@ export class InputHandler {
     };
   };
 
+  // Add onClick handler for die selection
+  private onClick = (event: MouseEvent) => {
+    // Don't process clicks if game is over or dice are rolling
+    if (this.state.gameOver || this.dice.isRolling || this.clickCooldown)
+      return;
+
+    // Set a cooldown to prevent multiple rapid clicks
+    this.clickCooldown = true;
+    setTimeout(() => {
+      this.clickCooldown = false;
+    }, 300);
+
+    // Don't process right clicks (used for camera panning)
+    if (event.button !== 0) return;
+
+    // Calculate mouse position in normalized device coordinates (-1 to +1)
+    const rect = this.container.getBoundingClientRect();
+    this.mouse.x =
+      ((event.clientX - rect.left) / this.container.clientWidth) * 2 - 1;
+    this.mouse.y =
+      -((event.clientY - rect.top) / this.container.clientHeight) * 2 + 1;
+
+    // Update the raycaster with the camera and mouse position
+    this.raycaster.setFromCamera(this.mouse, this.camera);
+
+    // Find all red dice with highest rank
+    const { dice: highestDice } = this.dice.findHighestRankDice();
+
+    // Get all dice meshes for intersection testing
+    const allDiceMeshes = [...this.dice.redDice, ...this.dice.blueDice].map(
+      (die) => die.mesh
+    );
+
+    // Check for intersections with all dice
+    const intersects = this.raycaster.intersectObjects(allDiceMeshes, false);
+
+    if (intersects.length > 0) {
+      // Find the die that was clicked
+      const clickedMesh = intersects[0].object;
+
+      // Find which die this mesh belongs to
+      const clickedDie = [...this.dice.redDice, ...this.dice.blueDice].find(
+        (die) => die.mesh === clickedMesh
+      );
+
+      if (clickedDie) {
+        // Check if it's a red die with highest rank
+        const isHighestRankRedDie =
+          this.dice.redDice.includes(clickedDie) &&
+          this.dice.isHighestRankDie(clickedDie);
+
+        if (isHighestRankRedDie) {
+          // If Ctrl is pressed, add to selection (or remove if already selected)
+          if (this.isCtrlPressed) {
+            const index = this.dice.selectedDice.indexOf(clickedDie);
+            if (index !== -1) {
+              // Remove from selection if already selected
+              this.dice.selectedDice.splice(index, 1);
+            } else {
+              // Add to selection
+              this.dice.selectedDice.push(clickedDie);
+            }
+          } else {
+            // If Ctrl is not pressed, replace selection with just this die
+            this.dice.selectedDice.length = 0;
+            this.dice.selectedDice.push(clickedDie);
+          }
+
+          // Move cursor to the clicked die
+          this.cursor.position.x = clickedDie.mesh.position.x;
+          this.cursor.position.z = clickedDie.mesh.position.z;
+          this.cursor.updatePosition();
+        }
+      }
+    } else if (!this.isCtrlPressed) {
+      // If clicking empty space and Ctrl is not pressed, clear selection
+      this.dice.selectedDice.length = 0;
+    }
+
+    // Always update highlighted dice and cursors after any click
+    this.dice.updateHighlightedDice(this.cursor.position);
+  };
+
+  // Update onKeyDown to track Ctrl key state
   private onKeyDown = (event: KeyboardEvent) => {
+    // Track Ctrl key state
+    if (event.code === "ControlLeft" || event.code === "ControlRight") {
+      this.isCtrlPressed = true;
+    }
+
     // Don't process new key events if game is over
     if (this.state.gameOver) return;
 
@@ -198,6 +306,23 @@ export class InputHandler {
         event.code === "ArrowDown" ||
         event.code === "ArrowLeft" ||
         event.code === "ArrowRight")
+    ) {
+      return;
+    }
+
+    // Don't process movement keys if dice are rolling
+    if (
+      this.dice.isRolling &&
+      (event.code === "KeyW" ||
+        event.code === "KeyA" ||
+        event.code === "KeyS" ||
+        event.code === "KeyD" ||
+        event.code === "ArrowUp" ||
+        event.code === "ArrowDown" ||
+        event.code === "ArrowLeft" ||
+        event.code === "ArrowRight" ||
+        event.code === "KeyQ" ||
+        event.code === "KeyE")
     ) {
       return;
     }
@@ -246,18 +371,15 @@ export class InputHandler {
     // Q and E keys for rotating dice in place
     if (event.code === "KeyQ" || event.code === "KeyE") {
       if (!this.dice.isRolling && this.dice.selectedDice.length > 0) {
-        const activeDie = this.dice.selectedDice[0];
+        // Filter selected dice to only include red dice with highest rank
+        const validSelectedDice = this.dice.selectedDice.filter(
+          (die) =>
+            this.dice.redDice.includes(die) && this.dice.isHighestRankDie(die)
+        );
 
-        // Check if the die is a red die (only red dice can be controlled)
-        if (!this.dice.redDice.includes(activeDie)) {
-          // If not a red die, deselect it and update highlighted dice
-          this.dice.selectedDice.length = 0;
-          this.dice.updateHighlightedDice();
-          return;
-        }
-
-        // Check if the die is still among the highest rank
-        if (!this.dice.isHighestRankDie(activeDie)) {
+        if (validSelectedDice.length === 0) {
+          // No valid dice selected, update highlighted dice and return
+          this.dice.selectedDice = [];
           this.dice.updateHighlightedDice();
           return;
         }
@@ -265,8 +387,8 @@ export class InputHandler {
         // Set rotation direction based on key
         const direction = event.code === "KeyQ" ? "left" : "right";
 
-        // Rotate the die
-        this.rotateSelectedDie(direction);
+        // Rotate all selected dice
+        this.rotateSelectedDice(direction);
       }
     }
 
@@ -282,7 +404,19 @@ export class InputHandler {
       );
 
       if (dieAtCursor) {
-        this.dice.selectedDice[0] = dieAtCursor;
+        if (this.isCtrlPressed) {
+          // If Ctrl is pressed, toggle selection
+          const index = this.dice.selectedDice.indexOf(dieAtCursor);
+          if (index !== -1) {
+            this.dice.selectedDice.splice(index, 1);
+          } else {
+            this.dice.selectedDice.push(dieAtCursor);
+          }
+        } else {
+          // Otherwise, replace selection
+          this.dice.selectedDice.length = 0;
+          this.dice.selectedDice.push(dieAtCursor);
+        }
         this.dice.updateHighlightedDice();
       }
     }
@@ -307,7 +441,13 @@ export class InputHandler {
     }
   };
 
+  // Update onKeyUp to track Ctrl key state
   private onKeyUp = (event: KeyboardEvent) => {
+    // Track Ctrl key state
+    if (event.code === "ControlLeft" || event.code === "ControlRight") {
+      this.isCtrlPressed = false;
+    }
+
     // Update key state
     if (event.code in this.keyStates) {
       this.keyStates[event.code] = false;
@@ -551,22 +691,39 @@ export class InputHandler {
     return nextDie;
   }
 
-  private rotateSelectedDie(direction: "left" | "right") {
+  // Update rotateSelectedDie to handle multiple dice
+  private rotateSelectedDice(direction: "left" | "right") {
     if (this.dice.isRolling || this.dice.selectedDice.length === 0) return;
 
-    const activeDie = this.dice.selectedDice[0];
+    // Filter selected dice to only include red dice with highest rank
+    const validSelectedDice = this.dice.selectedDice.filter(
+      (die) =>
+        this.dice.redDice.includes(die) && this.dice.isHighestRankDie(die)
+    );
+
+    if (validSelectedDice.length === 0) return;
 
     // Set rolling flag (this will be reset in the callback)
     this.dice.isRolling = true;
 
-    // Rotate the die
-    activeDie.rotateInPlace(direction, () => {
-      // After rotation completes
-      // Update highlights
-      this.dice.updateHighlightedDice();
+    // Track how many dice are still rotating
+    let pendingRotations = validSelectedDice.length;
 
-      // Reset rolling flag
-      this.dice.isRolling = false;
+    // Rotate each selected die
+    validSelectedDice.forEach((die) => {
+      die.rotateInPlace(direction, () => {
+        // After each die completes rotation
+        pendingRotations--;
+
+        // When all dice have completed rotation
+        if (pendingRotations === 0) {
+          // Update highlights
+          this.dice.updateHighlightedDice();
+
+          // Reset rolling flag
+          this.dice.isRolling = false;
+        }
+      });
     });
   }
 

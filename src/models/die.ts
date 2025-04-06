@@ -13,6 +13,7 @@ export class Die {
   size: number;
   isRolling = false;
   topFace = 2; // Default top face is 2 (when die is created)
+  baseColor: THREE.Color;
 
   // Track the complete orientation of the die
   // In standard orientation: top=2, front=3, right=1, left=6, back=4, bottom=5
@@ -30,6 +31,9 @@ export class Die {
     const position = options.position || new THREE.Vector3(0, this.size / 2, 0);
     const color = options.color || "#ff0000";
     const pipColor = options.pipColor || "#ffffff";
+
+    // Store the base color for highlighting
+    this.baseColor = new THREE.Color(color);
 
     // Create geometry and materials
     const geometry = new THREE.BoxGeometry(this.size, this.size, this.size);
@@ -243,22 +247,28 @@ export class Die {
     axis.crossVectors(new THREE.Vector3(0, 1, 0), direction);
     axis.normalize();
 
-    // Start the rolling animation
-    let remainingAngle = 90; // We want to roll exactly 90 degrees
-    const rollSpeed = 3; // Degrees per frame
-
     this.isRolling = true;
 
-    const animateRoll = () => {
-      if (remainingAngle <= 0) {
-        this.isRolling = false;
+    // Store the starting position
+    const startPosition = this.mesh.position.clone();
 
-        // Snap to exact grid position
-        this.mesh.position.x =
-          Math.round(this.mesh.position.x / this.size) * this.size;
-        this.mesh.position.z =
-          Math.round(this.mesh.position.z / this.size) * this.size;
-        this.mesh.position.y = this.size / 2; // Ensure it's exactly at y=size/2
+    // Calculate the target position (exactly one grid space away)
+    const targetPosition = startPosition
+      .clone()
+      .add(direction.clone().multiplyScalar(this.size));
+
+    // Use performance.now() for smoother animation timing
+    const startTime = performance.now();
+    const duration = 300; // Match the cursor movement duration (300ms)
+
+    const animateRoll = () => {
+      const currentTime = performance.now();
+      const elapsed = currentTime - startTime;
+
+      // If animation is complete
+      if (elapsed >= duration) {
+        // Snap to exact target position
+        this.mesh.position.copy(targetPosition);
 
         // Update the orientation based on the direction of roll
         this.updateOrientationAfterRoll(direction);
@@ -266,24 +276,33 @@ export class Die {
         // Calculate which face is now on top
         this.updateTopFaceFromRotation();
 
+        this.isRolling = false;
+
         if (onComplete) onComplete();
         return;
       }
 
-      const angleToRotate = Math.min(rollSpeed, remainingAngle);
-      remainingAngle -= angleToRotate;
+      // Calculate progress (0 to 1)
+      const progress = Math.min(elapsed / duration, 1);
 
-      // Apply rotation around anchor point
-      // 1. Create a matrix for the rotation around the axis
-      const rotationMatrix = new THREE.Matrix4();
-      rotationMatrix.makeRotationAxis(axis, (angleToRotate * Math.PI) / 180);
+      // Apply easing function for smoother movement (ease-out cubic)
+      const easedProgress = 1 - Math.pow(1 - progress, 3);
 
-      // 2. Translate dice position to origin, rotate, then translate back
-      this.mesh.position.sub(anchor); // Translate to origin relative to anchor
-      this.mesh.position.applyMatrix4(rotationMatrix); // Apply rotation
-      this.mesh.position.add(anchor); // Translate back
+      // Calculate the angle to rotate based on progress (0 to 90 degrees)
+      const angleToRotate = 90 * easedProgress;
 
-      // 3. Apply the same rotation to the dice's orientation
+      // Calculate the current position based on progress
+      const currentPosition = new THREE.Vector3().lerpVectors(
+        startPosition,
+        targetPosition,
+        easedProgress
+      );
+
+      // Update the die position
+      this.mesh.position.copy(currentPosition);
+
+      // Apply rotation around the axis
+      this.mesh.rotation.set(0, 0, 0); // Reset rotation
       this.mesh.rotateOnWorldAxis(axis, (angleToRotate * Math.PI) / 180);
 
       requestAnimationFrame(animateRoll);
@@ -305,32 +324,40 @@ export class Die {
     // Calculate rotation angle in radians (90 degrees)
     const rotationAngle = ((direction === "left" ? 1 : -1) * Math.PI) / 2;
 
-    // Start the rotation animation
-    let remainingAngle = Math.abs(rotationAngle);
-    const rotationSpeed = 0.1; // Radians per frame
+    // Use performance.now() for smoother animation timing
+    const startTime = performance.now();
+    const duration = 300; // Match the cursor movement duration (300ms)
 
     const animateRotation = () => {
-      if (remainingAngle <= 0) {
-        this.isRolling = false;
+      const currentTime = performance.now();
+      const elapsed = currentTime - startTime;
 
+      // If animation is complete
+      if (elapsed >= duration) {
         // Update the orientation based on the direction of rotation
         this.updateOrientationAfterRotation(direction);
 
         // Calculate which face is now on top
         this.updateTopFaceFromRotation();
 
+        this.isRolling = false;
+
         if (onComplete) onComplete();
         return;
       }
 
-      const angleToRotate = Math.min(rotationSpeed, remainingAngle);
-      remainingAngle -= angleToRotate;
+      // Calculate progress (0 to 1)
+      const progress = elapsed / duration;
 
-      // Apply rotation around the world Y axis (always relative to camera)
-      this.mesh.rotateOnWorldAxis(
-        worldYAxis,
-        direction === "left" ? angleToRotate : -angleToRotate
-      );
+      // Apply easing function for smoother movement (ease-out cubic)
+      const easedProgress = 1 - Math.pow(1 - progress, 3);
+
+      // Calculate the angle to rotate based on progress
+      const angleToRotate = rotationAngle * easedProgress;
+
+      // Reset rotation and apply the new rotation
+      this.mesh.rotation.set(0, 0, 0); // Reset rotation
+      this.mesh.rotateOnWorldAxis(worldYAxis, angleToRotate);
 
       requestAnimationFrame(animateRotation);
     };
@@ -465,27 +492,7 @@ export class Die {
 
   // Highlight this die with a specific color
   highlight(isHighlighted = true, isSelected = false): void {
-    const materials = this.mesh.material as THREE.MeshStandardMaterial[];
-
-    if (isHighlighted) {
-      // Choose color based on whether the die is selected or just movable
-      const highlightColor = isSelected
-        ? new THREE.Color(0xffff00) // Yellow for selected die
-        : new THREE.Color(0xff8800); // Orange for movable but unselected dice
-
-      const intensity = isSelected ? 0.3 : 0.2; // Slightly less intense for unselected
-
-      // Apply the glow effect
-      materials.forEach((material) => {
-        material.emissive = highlightColor;
-        material.emissiveIntensity = intensity;
-      });
-    } else {
-      // Remove glow
-      materials.forEach((material) => {
-        material.emissive = new THREE.Color(0x000000);
-        material.emissiveIntensity = 0;
-      });
-    }
+    // We no longer use emissive properties on the die itself
+    // The cursor will handle the visual highlighting
   }
 }
