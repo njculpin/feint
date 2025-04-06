@@ -26,6 +26,7 @@ export class GameManager {
   public blueFlag: Flag;
   public redFlag: Flag;
   private pendingDiceMovements = 0;
+  private collisionDetected = false;
 
   constructor(options: GameManagerOptions) {
     this.scene = options.scene;
@@ -439,6 +440,88 @@ export class GameManager {
     this.checkWinConditions();
   }
 
+  // New method to check for collisions during movement
+  public checkCollisionDuringMovement(
+    activeDie: Die,
+    currentPosition: THREE.Vector3
+  ): boolean {
+    // Check if the active die is red
+    const isRedDie = this.redDice.includes(activeDie);
+
+    // Get the opposing dice array
+    const opposingDice = isRedDie ? this.blueDice : this.redDice;
+
+    // Check for collision with opposing dice
+    for (const opposingDie of opposingDice) {
+      // Calculate distance between dice centers
+      const distance = new THREE.Vector3(
+        opposingDie.mesh.position.x - currentPosition.x,
+        0,
+        opposingDie.mesh.position.z - currentPosition.z
+      ).length();
+
+      // If dice are close enough to collide (less than 80% of a die size)
+      if (distance < activeDie.size * 0.8) {
+        // Collision detected!
+        console.log(
+          "Collision detected during movement! Both dice will explode."
+        );
+
+        // Create explosion effects for both dice
+        this.createExplosion(
+          opposingDie.mesh.position.clone(),
+          isRedDie ? 0x0066ff : 0xff0000
+        );
+        this.createExplosion(
+          currentPosition.clone(),
+          isRedDie ? 0xff0000 : 0x0066ff
+        );
+
+        // Remove the opposing die
+        this.scene.remove(opposingDie.mesh);
+        const opposingDiceArray = isRedDie ? this.blueDice : this.redDice;
+        const opposingIndex = opposingDiceArray.indexOf(opposingDie);
+        if (opposingIndex !== -1) {
+          opposingDiceArray.splice(opposingIndex, 1);
+        }
+
+        // Remove the opposing die position from occupied positions
+        const opposingPosIndex = this.occupiedPositions.findIndex(
+          (pos) =>
+            Math.abs(pos.x - opposingDie.mesh.position.x) < 0.1 &&
+            Math.abs(pos.z - opposingDie.mesh.position.z) < 0.1
+        );
+        if (opposingPosIndex !== -1) {
+          this.occupiedPositions.splice(opposingPosIndex, 1);
+        }
+
+        // Remove the active die
+        this.scene.remove(activeDie.mesh);
+        const activeDiceArray = isRedDie ? this.redDice : this.redDice;
+        const activeIndex = activeDiceArray.indexOf(activeDie);
+        if (activeIndex !== -1) {
+          activeDiceArray.splice(activeIndex, 1);
+        }
+
+        // If active die was selected, deselect it
+        if (this.selectedDice.includes(activeDie)) {
+          const selectedIndex = this.selectedDice.indexOf(activeDie);
+          if (selectedIndex !== -1) {
+            this.selectedDice.splice(selectedIndex, 1);
+          }
+        }
+
+        // Check for win conditions
+        this.checkWinConditions();
+
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  // This method is now only used for flag capture checks
   public checkCollisions(activeDie: Die, newPosition: THREE.Vector3) {
     // Check if the active die is red
     const isRedDie = this.redDice.includes(activeDie);
@@ -452,8 +535,11 @@ export class GameManager {
         Math.abs(opposingDie.mesh.position.x - newPosition.x) < 0.1 &&
         Math.abs(opposingDie.mesh.position.z - newPosition.z) < 0.1
       ) {
-        // Collision detected!
-        console.log("Collision detected! Both dice will explode.");
+        // If we get here, it means a collision wasn't detected during movement
+        // This is a fallback and shouldn't normally happen
+        console.log(
+          "Collision detected at end of movement! Both dice will explode."
+        );
 
         // Create explosion effects for both dice
         this.createExplosion(
@@ -623,6 +709,7 @@ export class GameManager {
 
     // Set rolling flag
     this.isRolling = true;
+    this.collisionDetected = false;
 
     // Store old positions for all dice
     const oldPositions = validSelectedDice.map((die) =>
@@ -657,36 +744,131 @@ export class GameManager {
     // Reset pending movements counter
     this.pendingDiceMovements = validSelectedDice.length;
 
-    // Roll all dice
-    validSelectedDice.forEach((die, index) => {
-      die.roll(direction, this.gameBoard.boundaryLimit, () => {
-        // After rolling completes for each die
+    // Custom roll function that checks for collisions during movement
+    const customRoll = (
+      die: Die,
+      direction: THREE.Vector3,
+      index: number,
+      onComplete?: () => void
+    ) => {
+      if (die.isRolling) return false;
 
-        // Remove old position from occupied list
-        const oldIndex = this.occupiedPositions.findIndex(
-          (pos) =>
-            Math.abs(pos.x - oldPositions[index].x) < 0.1 &&
-            Math.abs(pos.z - oldPositions[index].z) < 0.1
-        );
-        if (oldIndex !== -1) {
-          this.occupiedPositions.splice(oldIndex, 1);
+      // Store the starting position
+      const startPosition = die.mesh.position.clone();
+
+      // Calculate the target position (exactly one grid space away)
+      const targetPosition = startPosition
+        .clone()
+        .add(direction.clone().multiplyScalar(die.size));
+
+      // Calculate the axis of rotation (perpendicular to direction and up vector)
+      const axis = new THREE.Vector3();
+      axis.crossVectors(new THREE.Vector3(0, 1, 0), direction);
+      axis.normalize();
+
+      // Store the initial rotation
+      const initialRotation = die.mesh.rotation.clone();
+
+      die.isRolling = true;
+
+      // Use performance.now() for smoother animation timing
+      const startTime = performance.now();
+      const duration = 300; // Match the cursor movement duration (300ms)
+
+      const animateRoll = () => {
+        // If a collision was already detected for this die, stop the animation
+        if (this.collisionDetected) {
+          die.isRolling = false;
+          if (onComplete) onComplete();
+          return;
         }
 
-        // Check for collisions with opposing dice
-        const collisionOccurred = this.checkCollisions(
-          die,
-          newPositions[index]
+        const currentTime = performance.now();
+        const elapsed = currentTime - startTime;
+
+        // If animation is complete
+        if (elapsed >= duration) {
+          // Snap to exact target position
+          die.mesh.position.copy(targetPosition);
+
+          // Ensure the die has rotated exactly 90 degrees around the axis
+          die.mesh.rotation.copy(initialRotation);
+          die.mesh.rotateOnWorldAxis(axis, Math.PI / 2); // Rotate 90 degrees
+
+          // Update the orientation based on the direction of roll
+          die.updateTopFaceFromRotation();
+
+          die.isRolling = false;
+
+          if (onComplete) onComplete();
+          return;
+        }
+
+        // Calculate progress (0 to 1)
+        const progress = Math.min(elapsed / duration, 1);
+
+        // Apply easing function for smoother movement (ease-out cubic)
+        const easedProgress = 1 - Math.pow(1 - progress, 3);
+
+        // Calculate the current position based on progress
+        const currentPosition = new THREE.Vector3().lerpVectors(
+          startPosition,
+          targetPosition,
+          easedProgress
         );
 
-        // If no collision, add new position to occupied list and check for flag capture
-        if (!collisionOccurred) {
+        // Check for collisions at the current position
+        if (
+          !this.collisionDetected &&
+          this.checkCollisionDuringMovement(die, currentPosition)
+        ) {
+          // Collision detected, mark this die for removal
+          diceToRemove.push(die);
+          this.collisionDetected = true;
+          die.isRolling = false;
+          if (onComplete) onComplete();
+          return;
+        }
+
+        // Update the die position
+        die.mesh.position.copy(currentPosition);
+
+        // Calculate the rotation angle based on progress (0 to 90 degrees)
+        const rotationAngle = (Math.PI / 2) * easedProgress;
+
+        // Apply rotation - reset to initial rotation first, then apply the new rotation
+        die.mesh.rotation.copy(initialRotation);
+        die.mesh.rotateOnWorldAxis(axis, rotationAngle);
+
+        requestAnimationFrame(animateRoll);
+      };
+
+      animateRoll();
+      return true;
+    };
+
+    // Roll all dice
+    validSelectedDice.forEach((die, index) => {
+      customRoll(die, direction, index, () => {
+        // After rolling completes for each die
+
+        // If no collision occurred during movement
+        if (!diceToRemove.includes(die)) {
+          // Remove old position from occupied list
+          const oldIndex = this.occupiedPositions.findIndex(
+            (pos) =>
+              Math.abs(pos.x - oldPositions[index].x) < 0.1 &&
+              Math.abs(pos.z - oldPositions[index].z) < 0.1
+          );
+          if (oldIndex !== -1) {
+            this.occupiedPositions.splice(oldIndex, 1);
+          }
+
+          // If no collision, add new position to occupied list and check for flag capture
           this.occupiedPositions.push(newPositions[index].clone());
 
           // Check if die captured a flag
           this.checkFlagCapture(die);
-        } else {
-          // If collision occurred, mark this die for removal from selection
-          diceToRemove.push(die);
         }
 
         // Decrement pending movements counter
