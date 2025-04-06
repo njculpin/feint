@@ -16,6 +16,7 @@ export class Die {
   isRolling = false;
   topFace = 2; // Default top face is 2 (when die is created)
   baseColor: THREE.Color;
+  edgeHighlight: THREE.LineSegments | null = null;
 
   // Track the complete orientation of the die
   // In standard orientation: top=2, front=3, right=1, left=6, back=4, bottom=5
@@ -43,6 +44,10 @@ export class Die {
 
     // Create geometry and materials
     const geometry = new THREE.BoxGeometry(this.size, this.size, this.size);
+
+    // Add a subtle bevel to the edges
+    this.applyBevelToGeometry(geometry);
+
     const materials = this.createMaterials(color, pipColor);
 
     // Create mesh
@@ -54,10 +59,52 @@ export class Die {
     this.mesh.castShadow = castShadow;
     this.mesh.receiveShadow = receiveShadow;
 
+    // Add edge highlighting
+    this.addEdgeHighlight();
+
     // If an initial top face is specified, rotate the die to show that face
     if (options.initialTopFace !== undefined) {
       this.setTopFace(options.initialTopFace);
     }
+  }
+
+  // Apply a subtle bevel to the geometry edges
+  private applyBevelToGeometry(geometry: THREE.BoxGeometry): void {
+    // We'll use the BufferGeometryUtils to create a beveled edge effect
+    // This is a simplified approach since we can't directly bevel a BoxGeometry
+
+    // First, compute vertex normals if they don't exist
+    geometry.computeVertexNormals();
+
+    // Slightly scale down the geometry to create space for the edge highlight
+    const scale = 0.98;
+    geometry.scale(scale, scale, scale);
+  }
+
+  // Add edge highlighting to the die
+  private addEdgeHighlight(): void {
+    // Create a slightly larger wireframe cube for the edge highlight
+    const edgeGeometry = new THREE.EdgesGeometry(
+      new THREE.BoxGeometry(
+        this.size * 1.01,
+        this.size * 1.01,
+        this.size * 1.01
+      )
+    );
+
+    // Create a material for the edges - black with some transparency
+    const edgeMaterial = new THREE.LineBasicMaterial({
+      color: 0x000000,
+      transparent: true,
+      opacity: 0.3,
+      linewidth: 1,
+    });
+
+    // Create the edge highlight mesh
+    this.edgeHighlight = new THREE.LineSegments(edgeGeometry, edgeMaterial);
+
+    // Add the edge highlight as a child of the die mesh
+    this.mesh.add(this.edgeHighlight);
   }
 
   // Set the top face by rotating the die appropriately
@@ -108,6 +155,31 @@ export class Die {
         : `#${color.toString(16).padStart(6, "0")}`;
     context.fillRect(0, 0, canvas.width, canvas.height);
 
+    // Add a subtle gradient to create depth
+    const gradient = context.createRadialGradient(
+      canvas.width / 2,
+      canvas.height / 2,
+      0,
+      canvas.width / 2,
+      canvas.height / 2,
+      canvas.width * 0.7
+    );
+    gradient.addColorStop(0, "rgba(255, 255, 255, 0.15)");
+    gradient.addColorStop(1, "rgba(0, 0, 0, 0.15)");
+    context.fillStyle = gradient;
+    context.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Add a border around the edge of the face
+    const borderWidth = canvas.width * 0.03;
+    context.strokeStyle = "rgba(0, 0, 0, 0.3)";
+    context.lineWidth = borderWidth;
+    context.strokeRect(
+      borderWidth / 2,
+      borderWidth / 2,
+      canvas.width - borderWidth,
+      canvas.height - borderWidth
+    );
+
     // Draw dots with specified pip color
     context.fillStyle =
       typeof pipColor === "string"
@@ -151,15 +223,42 @@ export class Die {
     const positions = dotPositions[number] || [];
     const dotRadius = canvas.width * 0.08;
 
+    // Draw pips with a subtle 3D effect
     positions.forEach(([x, y]) => {
+      const centerX = x * canvas.width;
+      const centerY = y * canvas.height;
+
+      // Draw shadow
       context.beginPath();
       context.arc(
-        x * canvas.width,
-        y * canvas.height,
+        centerX + dotRadius * 0.1,
+        centerY + dotRadius * 0.1,
         dotRadius,
         0,
         Math.PI * 2
       );
+      context.fillStyle = "rgba(0, 0, 0, 0.3)";
+      context.fill();
+
+      // Draw main pip
+      context.beginPath();
+      context.arc(centerX, centerY, dotRadius, 0, Math.PI * 2);
+      context.fillStyle =
+        typeof pipColor === "string"
+          ? pipColor
+          : `#${pipColor.toString(16).padStart(6, "0")}`;
+      context.fill();
+
+      // Add highlight to pip
+      context.beginPath();
+      context.arc(
+        centerX - dotRadius * 0.3,
+        centerY - dotRadius * 0.3,
+        dotRadius * 0.4,
+        0,
+        Math.PI * 2
+      );
+      context.fillStyle = "rgba(255, 255, 255, 0.4)";
       context.fill();
     });
 
@@ -167,7 +266,7 @@ export class Die {
     context.font = "bold 72px Arial";
     context.textAlign = "center";
     context.textBaseline = "middle";
-    context.fillStyle = "black";
+    context.fillStyle = "rgba(0, 0, 0, 0.5)";
     context.fillText(
       number.toString(),
       canvas.width * 0.85,
@@ -193,33 +292,39 @@ export class Die {
     return [
       new THREE.MeshStandardMaterial({
         map: this.createDiceFaceTexture(1, color, pipColor),
-        roughness: 0.4,
-        metalness: 0.1,
+        roughness: 0.3,
+        metalness: 0.2,
+        bumpScale: 0.01,
       }), // Right face (X+)
       new THREE.MeshStandardMaterial({
         map: this.createDiceFaceTexture(6, color, pipColor),
-        roughness: 0.4,
-        metalness: 0.1,
+        roughness: 0.3,
+        metalness: 0.2,
+        bumpScale: 0.01,
       }), // Left face (X-)
       new THREE.MeshStandardMaterial({
         map: this.createDiceFaceTexture(2, color, pipColor),
-        roughness: 0.4,
-        metalness: 0.1,
+        roughness: 0.3,
+        metalness: 0.2,
+        bumpScale: 0.01,
       }), // Top face (Y+)
       new THREE.MeshStandardMaterial({
         map: this.createDiceFaceTexture(5, color, pipColor),
-        roughness: 0.4,
-        metalness: 0.1,
+        roughness: 0.3,
+        metalness: 0.2,
+        bumpScale: 0.01,
       }), // Bottom face (Y-)
       new THREE.MeshStandardMaterial({
         map: this.createDiceFaceTexture(3, color, pipColor),
-        roughness: 0.4,
-        metalness: 0.1,
+        roughness: 0.3,
+        metalness: 0.2,
+        bumpScale: 0.01,
       }), // Front face (Z+)
       new THREE.MeshStandardMaterial({
         map: this.createDiceFaceTexture(4, color, pipColor),
-        roughness: 0.4,
-        metalness: 0.1,
+        roughness: 0.3,
+        metalness: 0.2,
+        bumpScale: 0.01,
       }), // Back face (Z-)
     ];
   }
@@ -524,5 +629,22 @@ export class Die {
   highlight(isHighlighted = true, isSelected = false): void {
     // We no longer use emissive properties on the die itself
     // The cursor will handle the visual highlighting
+
+    // Update edge highlight visibility and color based on selection state
+    if (this.edgeHighlight) {
+      const material = this.edgeHighlight.material as THREE.LineBasicMaterial;
+
+      if (isHighlighted) {
+        // Make edge highlight more visible
+        material.opacity = isSelected ? 0.8 : 0.5;
+        material.color.set(isSelected ? 0xffff00 : 0xff8800);
+        material.needsUpdate = true;
+      } else {
+        // Reset to default subtle edge
+        material.opacity = 0.3;
+        material.color.set(0x000000);
+        material.needsUpdate = true;
+      }
+    }
   }
 }

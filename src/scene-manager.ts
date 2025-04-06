@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { CameraManager } from "./camera-manager";
 
 export interface SceneManagerOptions {
   container: HTMLElement;
@@ -8,10 +9,8 @@ export interface SceneManagerOptions {
 
 export class SceneManager {
   public scene: THREE.Scene;
-  public camera: THREE.PerspectiveCamera;
   public renderer: THREE.WebGLRenderer;
-  public initialCameraPosition: THREE.Vector3;
-  public initialCameraTarget: THREE.Vector3;
+  public cameraManager: CameraManager;
 
   // Store lights for potential updates
   private ambientLight!: THREE.AmbientLight;
@@ -40,17 +39,12 @@ export class SceneManager {
       this.scene.fog = new THREE.FogExp2(0x111111, 0.008);
     }
 
-    // Camera setup - 45-degree angle view
-    this.camera = new THREE.PerspectiveCamera(
-      45,
-      window.innerWidth / window.innerHeight,
-      0.1,
-      1000
-    );
-    this.initialCameraPosition = new THREE.Vector3(0, 35, 35); // Position at 45-degree angle
-    this.initialCameraTarget = new THREE.Vector3(0, 0, 0); // Look at center of board
-    this.camera.position.copy(this.initialCameraPosition);
-    this.camera.lookAt(this.initialCameraTarget);
+    // Initialize camera manager
+    this.cameraManager = new CameraManager({
+      container,
+      initialPosition: new THREE.Vector3(0, 35, 35),
+      initialTarget: new THREE.Vector3(0, 0, 0),
+    });
 
     // Renderer setup
     this.renderer = new THREE.WebGLRenderer({
@@ -158,26 +152,24 @@ export class SceneManager {
   }
 
   private handleResize(): void {
-    // Update camera aspect ratio
-    this.camera.aspect = window.innerWidth / window.innerHeight;
-    this.camera.updateProjectionMatrix();
-
     // Update renderer size
     this.renderer.setSize(window.innerWidth, window.innerHeight);
   }
 
   public render(): void {
-    this.renderer.render(this.scene, this.camera);
+    this.renderer.render(this.scene, this.cameraManager.camera);
   }
 
   public resetCamera(): void {
-    this.camera.position.copy(this.initialCameraPosition);
-    this.camera.lookAt(this.initialCameraTarget);
+    this.cameraManager.resetCamera();
   }
 
   public cleanup(): void {
     // Remove event listeners
     window.removeEventListener("resize", this.handleResize.bind(this));
+
+    // Clean up camera manager
+    this.cameraManager.cleanup();
 
     // Dispose of renderer
     if (this.renderer) {

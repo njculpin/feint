@@ -92,9 +92,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Initialize input handler
   const inputHandler = new InputHandler({
-    camera: sceneManager.camera,
-    initialCameraPosition: sceneManager.initialCameraPosition,
-    initialCameraTarget: sceneManager.initialCameraTarget,
+    camera: sceneManager.cameraManager.camera,
+    initialCameraPosition: sceneManager.cameraManager.initialPosition,
+    initialCameraTarget: sceneManager.cameraManager.initialTarget,
     container,
     dieSize,
     gameBoard: {
@@ -128,6 +128,31 @@ document.addEventListener("DOMContentLoaded", () => {
       isCursorMoving: cursorManager.isMoving(),
     },
     animateCursorMovement,
+  });
+
+  // Add keyboard shortcuts for camera views
+  window.addEventListener("keydown", (event) => {
+    // Only handle camera view changes if not in the middle of a game action
+    if (!gameManager.isRolling && !cursorManager.isMoving()) {
+      switch (event.code) {
+        case "Digit1":
+          // Default isometric view
+          sceneManager.cameraManager.resetCamera();
+          break;
+        case "Digit2":
+          // Top-down view
+          sceneManager.cameraManager.setTopDownView();
+          break;
+        case "Digit3":
+          // Front view
+          sceneManager.cameraManager.setFrontView();
+          break;
+        case "Digit4":
+          // Isometric view from opposite side
+          sceneManager.cameraManager.setIsometricView();
+          break;
+      }
+    }
   });
 
   // Animation loop

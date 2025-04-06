@@ -497,18 +497,20 @@ export class GameManager {
 
         // Remove the active die
         this.scene.remove(activeDie.mesh);
-        const activeDiceArray = isRedDie ? this.redDice : this.redDice;
+        const activeDiceArray = isRedDie ? this.redDice : this.blueDice;
         const activeIndex = activeDiceArray.indexOf(activeDie);
         if (activeIndex !== -1) {
           activeDiceArray.splice(activeIndex, 1);
         }
 
-        // If active die was selected, deselect it
-        if (this.selectedDice.includes(activeDie)) {
-          const selectedIndex = this.selectedDice.indexOf(activeDie);
-          if (selectedIndex !== -1) {
-            this.selectedDice.splice(selectedIndex, 1);
-          }
+        // Remove from occupied positions
+        const activePosIndex = this.occupiedPositions.findIndex(
+          (pos) =>
+            Math.abs(pos.x - activeDie.mesh.position.x) < 0.1 &&
+            Math.abs(pos.z - activeDie.mesh.position.z) < 0.1
+        );
+        if (activePosIndex !== -1) {
+          this.occupiedPositions.splice(activePosIndex, 1);
         }
 
         // Check for win conditions
@@ -784,9 +786,12 @@ export class GameManager {
       const startTime = performance.now();
       const duration = 300; // Match the cursor movement duration (300ms)
 
+      // Flag to track if this specific die had a collision
+      let hadCollision = false;
+
       const animateRoll = () => {
-        // If a collision was already detected for this die, stop the animation
-        if (this.collisionDetected) {
+        // If this specific die had a collision, stop its animation
+        if (hadCollision) {
           die.isRolling = false;
           if (onComplete) onComplete();
           return;
@@ -829,12 +834,12 @@ export class GameManager {
 
         // Check for collisions at the current position
         if (
-          !this.collisionDetected &&
+          !hadCollision &&
           this.checkCollisionDuringMovement(die, currentPosition)
         ) {
-          // Collision detected, mark this die for removal
+          // Mark this specific die as having a collision
+          hadCollision = true;
           diceToRemove.push(die);
-          this.collisionDetected = true;
           die.isRolling = false;
           if (onComplete) onComplete();
           return;
