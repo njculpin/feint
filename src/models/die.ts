@@ -236,17 +236,6 @@ export class Die {
       return false;
     }
 
-    // Calculate the anchor point (edge of the die in the direction of movement)
-    const anchor = new THREE.Vector3();
-    anchor.copy(this.mesh.position);
-    anchor.y -= this.size / 2; // Move to bottom of die
-    anchor.add(direction.clone().multiplyScalar(this.size / 2)); // Move in the direction to the edge
-
-    // Calculate the axis of rotation (perpendicular to direction and up vector)
-    const axis = new THREE.Vector3();
-    axis.crossVectors(new THREE.Vector3(0, 1, 0), direction);
-    axis.normalize();
-
     this.isRolling = true;
 
     // Store the starting position
@@ -256,6 +245,14 @@ export class Die {
     const targetPosition = startPosition
       .clone()
       .add(direction.clone().multiplyScalar(this.size));
+
+    // Calculate the axis of rotation (perpendicular to direction and up vector)
+    const axis = new THREE.Vector3();
+    axis.crossVectors(new THREE.Vector3(0, 1, 0), direction);
+    axis.normalize();
+
+    // Store the initial rotation
+    const initialRotation = this.mesh.rotation.clone();
 
     // Use performance.now() for smoother animation timing
     const startTime = performance.now();
@@ -269,6 +266,10 @@ export class Die {
       if (elapsed >= duration) {
         // Snap to exact target position
         this.mesh.position.copy(targetPosition);
+
+        // Ensure the die has rotated exactly 90 degrees around the axis
+        this.mesh.rotation.copy(initialRotation);
+        this.mesh.rotateOnWorldAxis(axis, Math.PI / 2); // Rotate 90 degrees
 
         // Update the orientation based on the direction of roll
         this.updateOrientationAfterRoll(direction);
@@ -288,9 +289,6 @@ export class Die {
       // Apply easing function for smoother movement (ease-out cubic)
       const easedProgress = 1 - Math.pow(1 - progress, 3);
 
-      // Calculate the angle to rotate based on progress (0 to 90 degrees)
-      const angleToRotate = 90 * easedProgress;
-
       // Calculate the current position based on progress
       const currentPosition = new THREE.Vector3().lerpVectors(
         startPosition,
@@ -301,9 +299,12 @@ export class Die {
       // Update the die position
       this.mesh.position.copy(currentPosition);
 
-      // Apply rotation around the axis
-      this.mesh.rotation.set(0, 0, 0); // Reset rotation
-      this.mesh.rotateOnWorldAxis(axis, (angleToRotate * Math.PI) / 180);
+      // Calculate the rotation angle based on progress (0 to 90 degrees)
+      const rotationAngle = (Math.PI / 2) * easedProgress;
+
+      // Apply rotation - reset to initial rotation first, then apply the new rotation
+      this.mesh.rotation.copy(initialRotation);
+      this.mesh.rotateOnWorldAxis(axis, rotationAngle);
 
       requestAnimationFrame(animateRoll);
     };
@@ -324,6 +325,9 @@ export class Die {
     // Calculate rotation angle in radians (90 degrees)
     const rotationAngle = ((direction === "left" ? 1 : -1) * Math.PI) / 2;
 
+    // Store the initial rotation
+    const initialRotation = this.mesh.rotation.clone();
+
     // Use performance.now() for smoother animation timing
     const startTime = performance.now();
     const duration = 300; // Match the cursor movement duration (300ms)
@@ -334,6 +338,10 @@ export class Die {
 
       // If animation is complete
       if (elapsed >= duration) {
+        // Ensure the die has rotated exactly 90 degrees
+        this.mesh.rotation.copy(initialRotation);
+        this.mesh.rotateOnWorldAxis(worldYAxis, rotationAngle);
+
         // Update the orientation based on the direction of rotation
         this.updateOrientationAfterRotation(direction);
 
@@ -353,11 +361,11 @@ export class Die {
       const easedProgress = 1 - Math.pow(1 - progress, 3);
 
       // Calculate the angle to rotate based on progress
-      const angleToRotate = rotationAngle * easedProgress;
+      const currentAngle = rotationAngle * easedProgress;
 
-      // Reset rotation and apply the new rotation
-      this.mesh.rotation.set(0, 0, 0); // Reset rotation
-      this.mesh.rotateOnWorldAxis(worldYAxis, angleToRotate);
+      // Reset to initial rotation and apply the new rotation
+      this.mesh.rotation.copy(initialRotation);
+      this.mesh.rotateOnWorldAxis(worldYAxis, currentAngle);
 
       requestAnimationFrame(animateRotation);
     };

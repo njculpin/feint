@@ -15,9 +15,8 @@ export class Cursor {
     // Create a group to hold the cursor elements
     this.mesh = new THREE.Group();
 
-    // Create an Into the Breach style cursor - a simple yellow square outline
-    // Make the cursor exactly match the die size
-    const cursorSize = dieSize;
+    // Make the cursor larger than the die size
+    const cursorSize = dieSize * 1.2; // 20% larger than the die
     const halfSize = cursorSize / 2;
 
     // Create the cursor using LineSegments for the outline
@@ -61,10 +60,10 @@ export class Cursor {
       new THREE.BufferAttribute(vertices, 3)
     );
 
-    // Create a bright yellow material for the cursor outline with increased emissive properties
+    // Create a bright yellow material for the cursor outline with increased thickness
     const cursorMaterial = new THREE.LineBasicMaterial({
       color: color, // Bright yellow
-      linewidth: 5, // Thicker lines for better visibility (note: this may not work in all browsers due to WebGL limitations)
+      linewidth: 8, // Thicker lines for better visibility (note: this may not work in all browsers due to WebGL limitations)
     });
 
     const cursorOutline = new THREE.LineSegments(
@@ -78,7 +77,7 @@ export class Cursor {
 
     // Add a second, slightly larger outline for better visibility
     const outerCursorGeometry = new THREE.BufferGeometry();
-    const outerSize = halfSize + 0.1; // Increased size difference for better visibility
+    const outerSize = halfSize + 0.15; // Increased size difference for better visibility
     const outerVertices = new Float32Array([
       // Bottom edge
       -outerSize,
@@ -121,7 +120,7 @@ export class Cursor {
     // Create a darker outline for contrast
     const outerCursorMaterial = new THREE.LineBasicMaterial({
       color: 0x222222, // Dark outline
-      linewidth: 3,
+      linewidth: 5, // Thicker line
       transparent: true,
       opacity: 0.7,
     });
@@ -133,15 +132,15 @@ export class Cursor {
     outerCursorOutline.position.y = 0.04; // Slightly below the yellow outline
     this.mesh.add(outerCursorOutline);
 
-    // Add a glowing plane underneath for emissive effect
+    // Add a larger glowing plane underneath for emissive effect
     const planeGeometry = new THREE.PlaneGeometry(
-      cursorSize * 1.1,
-      cursorSize * 1.1
+      cursorSize * 1.3,
+      cursorSize * 1.3
     );
     const planeMaterial = new THREE.MeshBasicMaterial({
       color: 0xffff00,
       transparent: true,
-      opacity: 0.2,
+      opacity: 0.25, // Slightly more opaque
       side: THREE.DoubleSide,
     });
 
@@ -149,6 +148,23 @@ export class Cursor {
     glowPlane.rotation.x = -Math.PI / 2; // Make it horizontal
     glowPlane.position.y = 0.02; // Just above the ground
     this.mesh.add(glowPlane);
+
+    // Add a second, more intense glow plane for better visibility
+    const innerGlowGeometry = new THREE.PlaneGeometry(
+      cursorSize * 1.1,
+      cursorSize * 1.1
+    );
+    const innerGlowMaterial = new THREE.MeshBasicMaterial({
+      color: 0xffff00,
+      transparent: true,
+      opacity: 0.3,
+      side: THREE.DoubleSide,
+    });
+
+    const innerGlow = new THREE.Mesh(innerGlowGeometry, innerGlowMaterial);
+    innerGlow.rotation.x = -Math.PI / 2;
+    innerGlow.position.y = 0.03; // Above the main glow plane
+    this.mesh.add(innerGlow);
   }
 
   // Set the cursor position
@@ -164,19 +180,37 @@ export class Cursor {
       // Pulse the yellow outline
       this.mesh.children[0].scale.set(factor, 1, factor);
 
-      // Pulse the glow plane with a stronger effect
+      // Pulse the outer outline
+      if (this.mesh.children.length > 1) {
+        this.mesh.children[1].scale.set(factor * 1.05, 1, factor * 1.05);
+      }
+
+      // Pulse the glow planes with a stronger effect
       if (this.mesh.children.length > 2) {
         const glowPlane = this.mesh.children[2];
-        const strongerFactor = 1 + (factor - 1) * 1.5;
+        const strongerFactor = 1 + (factor - 1) * 1.8;
         glowPlane.scale.set(strongerFactor, strongerFactor, 1);
 
         // Also pulse the opacity for more emissive effect
-        // Fix: Cast the object to Mesh to access its material property
         const glowPlaneMesh = glowPlane as THREE.Mesh;
         if (glowPlaneMesh.material) {
           const material = glowPlaneMesh.material as THREE.MeshBasicMaterial;
-          material.opacity = 0.2 + 0.1 * Math.sin(Date.now() * 0.003);
+          material.opacity = 0.25 + 0.15 * Math.sin(Date.now() * 0.003);
           material.needsUpdate = true;
+        }
+
+        // Pulse the inner glow plane
+        if (this.mesh.children.length > 3) {
+          const innerGlow = this.mesh.children[3];
+          const innerFactor = 1 + (factor - 1) * 2.0;
+          innerGlow.scale.set(innerFactor, innerFactor, 1);
+
+          const innerGlowMesh = innerGlow as THREE.Mesh;
+          if (innerGlowMesh.material) {
+            const material = innerGlowMesh.material as THREE.MeshBasicMaterial;
+            material.opacity = 0.3 + 0.2 * Math.sin(Date.now() * 0.004);
+            material.needsUpdate = true;
+          }
         }
       }
     }
@@ -328,7 +362,7 @@ export class CursorManager {
   // Update cursor animations
   update(): void {
     // More pronounced pulse for the cursor
-    const pulseFactor = 0.1 * Math.sin(Date.now() * 0.003) + 1.05;
+    const pulseFactor = 0.12 * Math.sin(Date.now() * 0.003) + 1.08;
 
     // Apply the pulse to the cursors
     this.selectedCursors.forEach((cursor) => {
