@@ -15,6 +15,8 @@ export class UIManager {
   private previousWinner: "red" | "blue" | null = null;
   private previousRedDiceCount = 0;
   private previousBlueDiceCount = 0;
+  // Add a property to track whose turn it is
+  private previousIsPlayerTurn = true;
 
   constructor(options: UIManagerOptions) {
     this.container = options.container;
@@ -33,15 +35,15 @@ export class UIManager {
     const instructions = document.createElement("div");
     instructions.className = "instructions";
     instructions.innerHTML = `
-        <h3>Dice Game Controls</h3>
-        <p>WASD/Arrow Keys: Move selected dice</p>
-        <p>Q/E: Rotate die in place</p>
-        <p>Left-click: Select a die</p>
-        <p>Ctrl + Left-click: Select multiple dice</p>
-        <p>Space/Enter: Select die at cursor</p>
-        <p>F: Recenter camera</p>
-        <p>Right-click + drag: Pan camera</p>
-      `;
+      <h3>Dice Game Controls</h3>
+      <p>WASD/Arrow Keys: Move selected dice</p>
+      <p>Q/E: Rotate die in place</p>
+      <p>Left-click: Select a die</p>
+      <p>Ctrl + Left-click: Select multiple dice</p>
+      <p>Space/Enter: Select die at cursor</p>
+      <p>F: Recenter camera</p>
+      <p>Right-click + drag: Pan camera</p>
+    `;
     document.body.appendChild(instructions);
     return instructions;
   }
@@ -89,20 +91,6 @@ export class UIManager {
 
     if (selectedDice.length === 0) {
       this.infoDisplay.innerHTML = `
-          <strong>Game Status</strong><br>
-          Highest Red Die Face: ${highestRank}<br>
-          <br>
-          ${redDiceFaces}<br>
-          <br>
-          ${blueDiceFaces}<br>
-          <br>
-          No die selected
-        `;
-      return;
-    }
-
-    const activeDie = selectedDice[0];
-    this.infoDisplay.innerHTML = `
         <strong>Game Status</strong><br>
         Highest Red Die Face: ${highestRank}<br>
         <br>
@@ -110,9 +98,23 @@ export class UIManager {
         <br>
         ${blueDiceFaces}<br>
         <br>
-        <strong>Selected Die</strong><br>
-        Top Face: ${activeDie.topFace}
+        No die selected
       `;
+      return;
+    }
+
+    const activeDie = selectedDice[0];
+    this.infoDisplay.innerHTML = `
+      <strong>Game Status</strong><br>
+      Highest Red Die Face: ${highestRank}<br>
+      <br>
+      ${redDiceFaces}<br>
+      <br>
+      ${blueDiceFaces}<br>
+      <br>
+      <strong>Selected Die</strong><br>
+      Top Face: ${activeDie.topFace}
+    `;
   }
 
   public updateGameStatusDisplay(
@@ -142,28 +144,28 @@ export class UIManager {
       // Handle draw condition when winner is null and game is over
       if (winner === null) {
         this.gameStatusDisplay.innerHTML = `
-          <div class="game-over">
-            <h2>Game Over!</h2>
-            <h3>It's a draw! All dice have been eliminated.</h3>
-            <button id="restart-button">Restart Game</button>
-          </div>
-        `;
+    <div class="game-over">
+      <h2>Game Over!</h2>
+      <h3>It's a draw! All dice have been eliminated.</h3>
+      <button id="restart-button">Restart Game</button>
+    </div>
+  `;
       } else {
         this.gameStatusDisplay.innerHTML = `
-          <div class="game-over">
-            <h2>Game Over!</h2>
-            <h3>${winner === "red" ? "Red" : "Blue"} team wins!</h3>
-            <button id="restart-button">Restart Game</button>
-          </div>
-        `;
+    <div class="game-over">
+      <h2>Game Over!</h2>
+      <h3>${winner === "red" ? "Red" : "Blue"} team wins!</h3>
+      <button id="restart-button">Restart Game</button>
+    </div>
+  `;
       }
     } else {
       this.gameStatusDisplay.innerHTML = `
-        <div class="game-status-info">
-          <p>Red Dice: ${redDiceCount}</p>
-          <p>Blue Dice: ${blueDiceCount}</p>
-        </div>
-      `;
+  <div class="game-status-info">
+    <p>Red Dice: ${redDiceCount}</p>
+    <p>Blue Dice: ${blueDiceCount}</p>
+  </div>
+`;
     }
   }
 

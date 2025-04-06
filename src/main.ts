@@ -92,7 +92,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // Initialize input handler
-  const inputHandler = new InputHandler({
+  const inputHandler: InputHandler = new InputHandler({
     camera: sceneManager.cameraManager.camera,
     initialCameraPosition: sceneManager.cameraManager.initialPosition,
     initialCameraTarget: sceneManager.cameraManager.initialTarget,
@@ -112,17 +112,45 @@ document.addEventListener("DOMContentLoaded", () => {
       blueDice: gameManager.blueDice,
       selectedDice: gameManager.selectedDice,
       isRolling: gameManager.isRolling,
+      isPlayerTurn: gameManager.isPlayerTurn,
+      isAIMoving: gameManager.aiManager.isAIMoving,
       findHighestRankDice: gameManager.findHighestRankDice.bind(gameManager),
       isHighestRankDie: gameManager.isHighestRankDie.bind(gameManager),
       updateHighlightedDice:
         gameManager.updateHighlightedDice.bind(gameManager),
-      moveDie: (direction: THREE.Vector3) =>
-        gameManager.moveDie(direction, animateCursorMovement),
-      checkContinuousMovement: () =>
+      moveDie: (direction: THREE.Vector3) => {
+        // Set a flag to track if the move was successful
+        let moveSuccessful = false;
+
+        // Attempt to move the die
+        gameManager.moveDie(direction, (x, z, duration, onComplete) => {
+          // Call the original animateCursorMovement
+          animateCursorMovement(x, z, duration, () => {
+            // Mark the move as successful
+            moveSuccessful = true;
+
+            // Call the original onComplete if provided
+            if (onComplete) onComplete();
+
+            // After player's move completes and animations finish, trigger AI move
+            // but don't toggle turns or block player
+            if (!gameManager.gameOver) {
+              setTimeout(() => {
+                if (!gameManager.isRolling && moveSuccessful) {
+                  // Trigger AI move without toggling turns
+                  gameManager.performAIMove();
+                }
+              }, 200); // Reduced delay after player move
+            }
+          });
+        });
+      },
+      checkContinuousMovement: (): void => {
         gameManager.checkContinuousMovement(
           inputHandler.getKeyStates(),
           animateCursorMovement
-        ),
+        );
+      },
     },
     state: {
       gameOver: gameManager.gameOver,
@@ -155,6 +183,69 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
   });
+
+  // Set up a timer for AI moves to make blue dice more aggressive
+  let aiMoveTimer: number | null = null;
+  let consecutiveFailedMoves = 0;
+  const MAX_FAILED_MOVES = 3;
+
+  function startAIMoveTimer() {
+    // Clear any existing timer
+    if (aiMoveTimer !== null) {
+      clearTimeout(aiMoveTimer);
+    }
+
+    // Calculate move delay based on consecutive failed moves
+    const moveDelay =
+      consecutiveFailedMoves >= MAX_FAILED_MOVES
+        ? 100 // Very fast if we've had several failed moves
+        : Math.random() * 200 + 200; // 200-400ms normally
+
+    aiMoveTimer = window.setTimeout(() => {
+      // Only move if the game is not over and no dice are currently rolling
+      if (
+        !gameManager.gameOver &&
+        !gameManager.isRolling &&
+        !gameManager.aiManager.isAIMoving
+      ) {
+        // Store the number of blue dice before the move
+        const blueDiceCountBefore = gameManager.blueDice.length;
+
+        // Try to perform an AI move
+        gameManager.performAIMove();
+
+        // Check if the move was successful by seeing if any dice moved
+        setTimeout(() => {
+          if (
+            blueDiceCountBefore === gameManager.blueDice.length &&
+            !gameManager.isRolling
+          ) {
+            // No dice were lost and no dice are rolling, so the move probably failed
+            consecutiveFailedMoves++;
+            console.log(
+              `AI move likely failed. Consecutive failed moves: ${consecutiveFailedMoves}`
+            );
+          } else {
+            // Reset the counter if a move was successful
+            consecutiveFailedMoves = 0;
+          }
+        }, 600); // Check after move animation would complete
+      }
+
+      // Restart the timer for the next move
+      startAIMoveTimer();
+    }, moveDelay);
+  }
+
+  // Start the AI move timer
+  startAIMoveTimer();
+
+  // Also trigger an immediate AI move to get things started
+  setTimeout(() => {
+    if (!gameManager.gameOver && !gameManager.isRolling) {
+      gameManager.performAIMove();
+    }
+  }, 500);
 
   // Animation loop
   function animate() {

@@ -350,7 +350,7 @@ export class Die {
     );
   }
 
-  // Roll the die in a direction
+  // Update the roll method to return a boolean indicating success
   roll(
     direction: THREE.Vector3,
     boundaryLimit: number,

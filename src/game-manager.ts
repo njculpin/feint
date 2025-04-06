@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { Die } from "./models/die";
 import { GameBoard } from "./models/board";
 import { Flag } from "./models/flag";
+import { AIManager } from "./ai-manager";
 
 export interface GameManagerOptions {
   scene: THREE.Scene;
@@ -26,6 +27,12 @@ export class GameManager {
   public blueFlag: Flag;
   public redFlag: Flag;
   private pendingDiceMovements = 0;
+
+  // Remove unused property
+  // public isPlayerTurn = true // true for player (red), false for AI (blue)
+
+  // AI Manager
+  public aiManager: AIManager;
 
   constructor(options: GameManagerOptions) {
     this.scene = options.scene;
@@ -100,6 +107,20 @@ export class GameManager {
 
     // Initialize the game
     this.initializeGame(options.dieSize);
+
+    // Initialize AI Manager after dice are created
+    this.aiManager = new AIManager({
+      redDice: this.redDice,
+      blueDice: this.blueDice,
+      redFlag: this.redFlag,
+      blueFlag: this.blueFlag,
+      gameBoard: this.gameBoard,
+      occupiedPositions: this.occupiedPositions,
+      canDieMove: this.canDieMove.bind(this),
+      checkCollisions: this.checkCollisions.bind(this),
+      createExplosion: this.createExplosion.bind(this),
+      triggerWin: this.triggerWin.bind(this),
+    });
   }
 
   private initializeGame(dieSize: number) {
@@ -219,6 +240,7 @@ export class GameManager {
     );
   }
 
+  // Find highest rank red dice (for player)
   public findHighestRankDice(): { dice: Die[]; rank: number } {
     let highestRank = 0;
 
@@ -237,6 +259,7 @@ export class GameManager {
     return { dice: highestDice, rank: highestRank };
   }
 
+  // Check if a red die is highest rank
   public isHighestRankDie(die: Die): boolean {
     const { dice: highestDice } = this.findHighestRankDice();
     return highestDice.includes(die);
@@ -352,14 +375,25 @@ export class GameManager {
       return false;
     }
 
-    // Check if the new position has ANY flag (flags act as walls for both teams)
+    // Check if the new position has the same team's flag (can't move there)
+    const isRedDie = this.redDice.includes(die);
+    const sameTeamFlag = isRedDie ? this.redFlag : this.blueFlag;
     if (
-      (Math.abs(newPosition.x - this.redFlag.mesh.position.x) < 0.1 &&
-        Math.abs(newPosition.z - this.redFlag.mesh.position.z) < 0.1) ||
-      (Math.abs(newPosition.x - this.blueFlag.mesh.position.x) < 0.1 &&
-        Math.abs(newPosition.z - this.blueFlag.mesh.position.z) < 0.1)
+      Math.abs(newPosition.x - sameTeamFlag.mesh.position.x) < 0.1 &&
+      Math.abs(newPosition.z - sameTeamFlag.mesh.position.z) < 0.1
     ) {
       return false;
+    }
+
+    // Check if the new position has the opposing team's flag
+    // If it does, we'll allow the move but handle it specially
+    const opposingFlag = isRedDie ? this.blueFlag : this.redFlag;
+    if (
+      Math.abs(newPosition.x - opposingFlag.mesh.position.x) < 0.1 &&
+      Math.abs(newPosition.z - opposingFlag.mesh.position.z) < 0.1
+    ) {
+      // Allow the move - we'll handle the flag capture in the move logic
+      return true;
     }
 
     return true;
@@ -552,8 +586,24 @@ export class GameManager {
       }
     }
 
-    // No need to check for flag collisions here anymore
-    // since dice can't move into flag cells in the first place
+    // Check if the die is about to move into the opposing flag position
+    const opposingFlag = isRedDie ? this.blueFlag : this.redFlag;
+    if (
+      Math.abs(currentPosition.x - opposingFlag.mesh.position.x) <
+        activeDie.size * 0.8 &&
+      Math.abs(currentPosition.z - opposingFlag.mesh.position.z) <
+        activeDie.size * 0.8
+    ) {
+      // Flag capture detected!
+      console.log(
+        `${isRedDie ? "Red" : "Blue"} die is capturing the opposing flag!`
+      );
+
+      // Trigger win for the capturing team
+      this.triggerWin(isRedDie ? "red" : "blue");
+
+      return true;
+    }
 
     return false;
   }
@@ -629,6 +679,23 @@ export class GameManager {
       }
     }
 
+    // Check if the die is moving into the opposing flag position
+    const opposingFlag = isRedDie ? this.blueFlag : this.redFlag;
+    if (
+      Math.abs(newPosition.x - opposingFlag.mesh.position.x) < 0.1 &&
+      Math.abs(newPosition.z - opposingFlag.mesh.position.z) < 0.1
+    ) {
+      // Flag capture detected!
+      console.log(
+        `${isRedDie ? "Red" : "Blue"} die is capturing the opposing flag!`
+      );
+
+      // Trigger win for the capturing team
+      this.triggerWin(isRedDie ? "red" : "blue");
+
+      return true;
+    }
+
     return false;
   }
 
@@ -666,11 +733,6 @@ export class GameManager {
     this.winner = team;
   }
 
-  // This method is now empty as dice can't move into flag cells
-  public checkFlagCapture(die: Die) {
-    return false;
-  }
-
   public checkWinConditions() {
     // If game is already over, don't check again
     if (this.gameOver) return;
@@ -703,7 +765,7 @@ export class GameManager {
     }
   }
 
-  // Update the moveDie method to remove dust particles
+  // Update the moveDie method to handle flag capture
   public moveDie(
     direction: THREE.Vector3,
     animateCursorMovement?: (
@@ -750,6 +812,40 @@ export class GameManager {
     const newPositions = validSelectedDice.map((die) =>
       die.mesh.position.clone().add(direction.clone().multiplyScalar(die.size))
     );
+
+    // Check if any dice would move into the opposing flag
+    const wouldCaptureFlag = validSelectedDice.some((die) => {
+      const newPos = die.mesh.position
+        .clone()
+        .add(direction.clone().multiplyScalar(die.size));
+      const isRedDie = this.redDice.includes(die);
+      const opposingFlag = isRedDie ? this.blueFlag : this.redFlag;
+
+      return (
+        Math.abs(newPos.x - opposingFlag.mesh.position.x) < 0.1 &&
+        Math.abs(newPos.z - opposingFlag.mesh.position.z) < 0.1
+      );
+    });
+
+    // If any dice would capture the flag, trigger win immediately
+    if (wouldCaptureFlag) {
+      // Determine which team is capturing
+      const isRedCapturing = this.redDice.includes(validSelectedDice[0]);
+
+      // Create explosion at the die's position
+      this.createExplosion(
+        validSelectedDice[0].mesh.position.clone(),
+        isRedCapturing ? 0xff0000 : 0x0066ff
+      );
+
+      // Trigger win
+      this.triggerWin(isRedCapturing ? "red" : "blue");
+
+      // Reset rolling flag
+      this.isRolling = false;
+
+      return;
+    }
 
     // Store the current cursor position for later use
     const currentCursorPosition =
@@ -936,6 +1032,11 @@ export class GameManager {
         }
       });
     });
+  }
+
+  // Delegate AI move to the AIManager
+  public performAIMove() {
+    return this.aiManager.performAIMove(this.isRolling, this.gameOver);
   }
 
   public checkContinuousMovement(

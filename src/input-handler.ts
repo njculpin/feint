@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import type { Die } from "./models/die";
 
-// Update the InputHandlerOptions interface to include animateCursorMovement in the dice object
+// Update the InputHandlerOptions interface to use aiManager.isAIMoving
 export interface InputHandlerOptions {
   camera: THREE.PerspectiveCamera;
   initialCameraPosition: THREE.Vector3;
@@ -22,6 +22,8 @@ export interface InputHandlerOptions {
     blueDice: Die[];
     selectedDice: Die[];
     isRolling: boolean;
+    isPlayerTurn: boolean;
+    isAIMoving: boolean;
     findHighestRankDice: () => { dice: Die[]; rank: number };
     isHighestRankDie: (die: Die) => boolean;
     updateHighlightedDice: (cursorPosition?: THREE.Vector3) => void;
@@ -66,6 +68,8 @@ export class InputHandler {
     blueDice: Die[];
     selectedDice: Die[];
     isRolling: boolean;
+    isPlayerTurn: boolean;
+    isAIMoving: boolean;
     findHighestRankDice: () => { dice: Die[]; rank: number };
     isHighestRankDie: (die: Die) => boolean;
     updateHighlightedDice: (cursorPosition?: THREE.Vector3) => void;
@@ -297,6 +301,9 @@ export class InputHandler {
     // Don't process new key events if game is over
     if (this.state.gameOver) return;
 
+    // Remove the turn-based restriction
+    // if (!this.dice.isPlayerTurn || this.dice.isAIMoving) return
+
     // Don't process new key events if cursor is moving
     if (
       this.state.isCursorMoving &&
@@ -304,23 +311,6 @@ export class InputHandler {
         event.code === "ArrowDown" ||
         event.code === "ArrowLeft" ||
         event.code === "ArrowRight")
-    ) {
-      return;
-    }
-
-    // Don't process movement keys if dice are rolling
-    if (
-      this.dice.isRolling &&
-      (event.code === "KeyW" ||
-        event.code === "KeyA" ||
-        event.code === "KeyS" ||
-        event.code === "KeyD" ||
-        event.code === "ArrowUp" ||
-        event.code === "ArrowDown" ||
-        event.code === "ArrowLeft" ||
-        event.code === "ArrowRight" ||
-        event.code === "KeyQ" ||
-        event.code === "KeyE")
     ) {
       return;
     }
@@ -365,7 +355,6 @@ export class InputHandler {
         }
       }
     }
-
     // Q and E keys for rotating dice in place
     if (event.code === "KeyQ" || event.code === "KeyE") {
       if (!this.dice.isRolling && this.dice.selectedDice.length > 0) {
