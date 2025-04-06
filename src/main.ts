@@ -1,9 +1,10 @@
-import * as THREE from "three";
+import type * as THREE from "three";
 import "./style.css";
 import { InputHandler } from "./input-handler";
 import { GameManager } from "./game-manager";
 import { CursorManager } from "./models/cursor";
 import { UIManager } from "./ui-manager";
+import { SceneManager } from "./scene-manager";
 
 // Wait for DOM to be fully loaded
 document.addEventListener("DOMContentLoaded", () => {
@@ -12,47 +13,8 @@ document.addEventListener("DOMContentLoaded", () => {
   container.id = "container";
   document.body.appendChild(container);
 
-  // Scene setup
-  const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x111111);
-
-  // Camera setup - 45-degree angle view
-  const camera = new THREE.PerspectiveCamera(
-    45,
-    window.innerWidth / window.innerHeight,
-    0.1,
-    1000
-  );
-  const initialCameraPosition = new THREE.Vector3(0, 35, 35); // Position at 45-degree angle
-  const initialCameraTarget = new THREE.Vector3(0, 0, 0); // Look at center of board
-  camera.position.copy(initialCameraPosition);
-  camera.lookAt(initialCameraTarget);
-
-  // Renderer setup
-  const renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  container.appendChild(renderer.domElement);
-
-  // Lighting
-  const ambientLight = new THREE.AmbientLight(0xffffff, 0.7); // Increased ambient light intensity
-  scene.add(ambientLight);
-
-  // Main directional light (sun-like)
-  const directionalLight = new THREE.DirectionalLight(0xffffff, 1.2); // Increased intensity
-  directionalLight.position.set(10, 15, 10); // Adjusted position
-  directionalLight.castShadow = true;
-  scene.add(directionalLight);
-
-  // Add a secondary directional light from the opposite direction to reduce shadows
-  const fillLight = new THREE.DirectionalLight(0xffffff, 0.5);
-  fillLight.position.set(-10, 10, -10);
-  scene.add(fillLight);
-
-  // Add a subtle blue-tinted light from below for more dimension
-  const groundLight = new THREE.DirectionalLight(0xaaccff, 0.2);
-  groundLight.position.set(0, -5, 0);
-  scene.add(groundLight);
+  // Create scene manager
+  const sceneManager = new SceneManager({ container });
 
   // Define sizes for grid-based movement
   const dieSize = 2; // Size of the die
@@ -72,14 +34,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Create game manager
   const gameManager = new GameManager({
-    scene,
-    renderer,
+    scene: sceneManager.scene,
+    renderer: sceneManager.renderer,
     dieSize,
     gridSize,
   });
 
   // Create cursor manager
-  const cursorManager = new CursorManager(scene, dieSize);
+  const cursorManager = new CursorManager(sceneManager.scene, dieSize);
 
   // Function to update cursor position
   function updateCursorPosition() {
@@ -120,9 +82,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Initialize input handler
   const inputHandler = new InputHandler({
-    camera,
-    initialCameraPosition,
-    initialCameraTarget,
+    camera: sceneManager.camera,
+    initialCameraPosition: sceneManager.initialCameraPosition,
+    initialCameraTarget: sceneManager.initialCameraTarget,
     container,
     dieSize,
     gameBoard: {
@@ -181,15 +143,9 @@ document.addEventListener("DOMContentLoaded", () => {
       gameManager.blueDice.length
     );
 
-    renderer.render(scene, camera);
+    // Render the scene
+    sceneManager.render();
   }
-
-  // Handle window resize
-  window.addEventListener("resize", () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-  });
 
   // Start animation loop
   animate();

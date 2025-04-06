@@ -139,20 +139,31 @@ export class UIManager {
     this.previousBlueDiceCount = blueDiceCount;
 
     if (gameOver) {
-      this.gameStatusDisplay.innerHTML = `
+      // Handle draw condition when winner is null and game is over
+      if (winner === null) {
+        this.gameStatusDisplay.innerHTML = `
+          <div class="game-over">
+            <h2>Game Over!</h2>
+            <h3>It's a draw! All dice have been eliminated.</h3>
+            <button id="restart-button">Restart Game</button>
+          </div>
+        `;
+      } else {
+        this.gameStatusDisplay.innerHTML = `
           <div class="game-over">
             <h2>Game Over!</h2>
             <h3>${winner === "red" ? "Red" : "Blue"} team wins!</h3>
             <button id="restart-button">Restart Game</button>
           </div>
         `;
+      }
     } else {
       this.gameStatusDisplay.innerHTML = `
-          <div class="game-status-info">
-            <p>Red Dice: ${redDiceCount}</p>
-            <p>Blue Dice: ${blueDiceCount}</p>
-          </div>
-        `;
+        <div class="game-status-info">
+          <p>Red Dice: ${redDiceCount}</p>
+          <p>Blue Dice: ${blueDiceCount}</p>
+        </div>
+      `;
     }
   }
 

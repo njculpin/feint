@@ -670,6 +670,15 @@ export class GameManager {
       console.log("Game over! Red team wins!");
       return;
     }
+
+    // Check if all dice from both teams are eliminated (draw)
+    if (this.redDice.length === 0 && this.blueDice.length === 0) {
+      console.log("All dice eliminated!");
+      this.gameOver = true;
+      this.winner = null;
+      console.log("Game over! It's a draw!");
+      return;
+    }
   }
 
   // Update the moveDie method to move all selected dice with better synchronization
@@ -796,6 +805,7 @@ export class GameManager {
           die.mesh.rotateOnWorldAxis(axis, Math.PI / 2); // Rotate 90 degrees
 
           // Update the orientation based on the direction of roll
+          // die.updateOrientationAfterRoll(direction)
           die.updateTopFaceFromRotation();
 
           die.isRolling = false;
