@@ -14,7 +14,11 @@ document.addEventListener("DOMContentLoaded", () => {
   document.body.appendChild(container);
 
   // Create scene manager
-  const sceneManager = new SceneManager({ container });
+  const sceneManager = new SceneManager({
+    container,
+    enableShadows: true,
+    enableFog: true,
+  });
 
   // Define sizes for grid-based movement
   const dieSize = 2; // Size of the die
@@ -39,6 +43,12 @@ document.addEventListener("DOMContentLoaded", () => {
     dieSize,
     gridSize,
   });
+
+  // Update flag light positions based on actual flag positions
+  sceneManager.updateFlagLightPositions(
+    gameManager.redFlag.mesh.position,
+    gameManager.blueFlag.mesh.position
+  );
 
   // Create cursor manager
   const cursorManager = new CursorManager(sceneManager.scene, dieSize);

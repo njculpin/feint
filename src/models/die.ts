@@ -6,6 +6,8 @@ export interface DieOptions {
   color?: string | number;
   pipColor?: string | number;
   initialTopFace?: number;
+  castShadow?: boolean;
+  receiveShadow?: boolean;
 }
 
 export class Die {
@@ -31,6 +33,10 @@ export class Die {
     const position = options.position || new THREE.Vector3(0, this.size / 2, 0);
     const color = options.color || "#ff0000";
     const pipColor = options.pipColor || "#ffffff";
+    const castShadow =
+      options.castShadow !== undefined ? options.castShadow : true;
+    const receiveShadow =
+      options.receiveShadow !== undefined ? options.receiveShadow : true;
 
     // Store the base color for highlighting
     this.baseColor = new THREE.Color(color);
@@ -43,6 +49,10 @@ export class Die {
     this.mesh = new THREE.Mesh(geometry, materials);
     this.mesh.position.copy(position);
     this.mesh.rotation.set(0, 0, 0); // This will have the "2" face up
+
+    // Enable shadows
+    this.mesh.castShadow = castShadow;
+    this.mesh.receiveShadow = receiveShadow;
 
     // If an initial top face is specified, rotate the die to show that face
     if (options.initialTopFace !== undefined) {
@@ -183,21 +193,33 @@ export class Die {
     return [
       new THREE.MeshStandardMaterial({
         map: this.createDiceFaceTexture(1, color, pipColor),
+        roughness: 0.4,
+        metalness: 0.1,
       }), // Right face (X+)
       new THREE.MeshStandardMaterial({
         map: this.createDiceFaceTexture(6, color, pipColor),
+        roughness: 0.4,
+        metalness: 0.1,
       }), // Left face (X-)
       new THREE.MeshStandardMaterial({
         map: this.createDiceFaceTexture(2, color, pipColor),
+        roughness: 0.4,
+        metalness: 0.1,
       }), // Top face (Y+)
       new THREE.MeshStandardMaterial({
         map: this.createDiceFaceTexture(5, color, pipColor),
+        roughness: 0.4,
+        metalness: 0.1,
       }), // Bottom face (Y-)
       new THREE.MeshStandardMaterial({
         map: this.createDiceFaceTexture(3, color, pipColor),
+        roughness: 0.4,
+        metalness: 0.1,
       }), // Front face (Z+)
       new THREE.MeshStandardMaterial({
         map: this.createDiceFaceTexture(4, color, pipColor),
+        roughness: 0.4,
+        metalness: 0.1,
       }), // Back face (Z-)
     ];
   }

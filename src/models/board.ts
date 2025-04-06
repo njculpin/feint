@@ -8,6 +8,7 @@ export interface GameBoardOptions {
   borderColor?: string | number;
   gridColor?: string | number;
   startMarkerColor?: string | number;
+  receiveShadows?: boolean;
 }
 
 export class GameBoard {
@@ -30,9 +31,11 @@ export class GameBoard {
     const color = options.color || 0x222222;
     const borderColor = options.borderColor || 0x444444;
     const gridColor = options.gridColor || 0x444444;
+    const receiveShadows =
+      options.receiveShadows !== undefined ? options.receiveShadows : true;
 
     // Create table plane
-    this.tablePlane = this.createTablePlane(color);
+    this.tablePlane = this.createTablePlane(color, receiveShadows);
 
     // Create border
     this.border = this.createBorder(borderColor);
@@ -44,7 +47,7 @@ export class GameBoard {
     const startPos = this.getStartPosition(this.cellSize);
     this.startFlag = new Flag({
       position: new THREE.Vector3(startPos.x, 0, startPos.z),
-      poleHeight: this.cellSize * 2, // Much taller pole (2.5x the cell size)
+      poleHeight: this.cellSize * 2.5, // Much taller pole (2.5x the cell size)
       poleRadius: this.cellSize * 0.08, // Much thicker pole (8% of cell size)
       flagWidth: this.cellSize * 1.0, // Flag as wide as a cell
       flagHeight: this.cellSize * 0.6, // Flag 60% as tall as a cell
@@ -55,7 +58,7 @@ export class GameBoard {
     const endPos = this.getEndPosition(this.cellSize);
     this.endFlag = new Flag({
       position: new THREE.Vector3(endPos.x, 0, endPos.z),
-      poleHeight: this.cellSize * 2, // Much taller pole (2.5x the cell size)
+      poleHeight: this.cellSize * 2.5, // Much taller pole (2.5x the cell size)
       poleRadius: this.cellSize * 0.08, // Much thicker pole (8% of cell size)
       flagWidth: this.cellSize * 1.0, // Flag as wide as a cell
       flagHeight: this.cellSize * 0.6, // Flag 60% as tall as a cell
@@ -64,17 +67,80 @@ export class GameBoard {
     });
   }
 
-  private createTablePlane(color: string | number): THREE.Mesh {
+  private createTablePlane(
+    color: string | number,
+    receiveShadows: boolean
+  ): THREE.Mesh {
+    // Create a more interesting board texture
+    const textureSize = 1024;
+    const canvas = document.createElement("canvas");
+    canvas.width = textureSize;
+    canvas.height = textureSize;
+    const ctx = canvas.getContext("2d");
+
+    if (ctx) {
+      // Fill with base color
+      ctx.fillStyle =
+        typeof color === "string"
+          ? color
+          : `#${color.toString(16).padStart(6, "0")}`;
+      ctx.fillRect(0, 0, textureSize, textureSize);
+
+      // Add a subtle grid pattern
+      const gridSize = textureSize / this.gridSize;
+      ctx.strokeStyle = "rgba(80, 80, 80, 0.3)";
+      ctx.lineWidth = 2;
+
+      // Draw grid lines
+      for (let i = 0; i <= this.gridSize; i++) {
+        const pos = i * gridSize;
+
+        // Horizontal lines
+        ctx.beginPath();
+        ctx.moveTo(0, pos);
+        ctx.lineTo(textureSize, pos);
+        ctx.stroke();
+
+        // Vertical lines
+        ctx.beginPath();
+        ctx.moveTo(pos, 0);
+        ctx.lineTo(pos, textureSize);
+        ctx.stroke();
+      }
+
+      // Add some noise for texture
+      for (let i = 0; i < 5000; i++) {
+        const x = Math.random() * textureSize;
+        const y = Math.random() * textureSize;
+        const size = Math.random() * 2 + 1;
+        const alpha = Math.random() * 0.1;
+
+        ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+        ctx.fillRect(x, y, size, size);
+      }
+    }
+
+    // Create texture from canvas
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(1, 1);
+
+    // Create material with the texture
+    const material = new THREE.MeshStandardMaterial({
+      map: texture,
+      roughness: 0.8,
+      metalness: 0.2,
+    });
+
     const tablePlane = new THREE.Mesh(
       new THREE.PlaneGeometry(this.boardSize, this.boardSize),
-      new THREE.MeshStandardMaterial({
-        color: 0x333333, // Slightly lighter gray for better contrast
-        roughness: 0.8,
-        metalness: 0.2,
-      })
+      material
     );
+
     tablePlane.rotation.x = -Math.PI / 2; // Rotate to be horizontal
     tablePlane.position.y = 0; // Position at y=0
+    tablePlane.receiveShadow = receiveShadows;
 
     return tablePlane;
   }
@@ -83,7 +149,10 @@ export class GameBoard {
     const borderGeometry = new THREE.EdgesGeometry(
       new THREE.BoxGeometry(this.boardSize, 0.1, this.boardSize)
     );
-    const borderMaterial = new THREE.LineBasicMaterial({ color: color });
+    const borderMaterial = new THREE.LineBasicMaterial({
+      color: color,
+      linewidth: 2,
+    });
     const border = new THREE.LineSegments(borderGeometry, borderMaterial);
     border.position.y = 0.05;
 
@@ -110,7 +179,10 @@ export class GameBoard {
     scene.add(this.tablePlane);
     scene.add(this.border);
     // scene.add(this.gridHelper);
-    this.startFlag.addToScene(scene);
+
+    // Remove these lines to prevent adding the flags twice
+    // this.startFlag.addToScene(scene)
+    // this.endFlag.addToScene(scene)
   }
 
   // Get the starting position for a die (middle column, one cell in from the edge)
