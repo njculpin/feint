@@ -196,6 +196,29 @@ export class GameManager {
     );
   }
 
+  // Check if a position has a flag
+  public isPositionFlag(position: THREE.Vector3): boolean {
+    // Check if position matches either flag position
+    return (
+      (Math.abs(position.x - this.redFlag.mesh.position.x) < 0.1 &&
+        Math.abs(position.z - this.redFlag.mesh.position.z) < 0.1) ||
+      (Math.abs(position.x - this.blueFlag.mesh.position.x) < 0.1 &&
+        Math.abs(position.z - this.blueFlag.mesh.position.z) < 0.1)
+    );
+  }
+
+  // Check if a position has the opposing team's flag
+  public isPositionOpposingFlag(
+    position: THREE.Vector3,
+    isRedDie: boolean
+  ): boolean {
+    const flagToCheck = isRedDie ? this.blueFlag : this.redFlag;
+    return (
+      Math.abs(position.x - flagToCheck.mesh.position.x) < 0.1 &&
+      Math.abs(position.z - flagToCheck.mesh.position.z) < 0.1
+    );
+  }
+
   public findHighestRankDice(): { dice: Die[]; rank: number } {
     let highestRank = 0;
 
@@ -329,6 +352,16 @@ export class GameManager {
       return false;
     }
 
+    // Check if the new position has ANY flag (flags act as walls for both teams)
+    if (
+      (Math.abs(newPosition.x - this.redFlag.mesh.position.x) < 0.1 &&
+        Math.abs(newPosition.z - this.redFlag.mesh.position.z) < 0.1) ||
+      (Math.abs(newPosition.x - this.blueFlag.mesh.position.x) < 0.1 &&
+        Math.abs(newPosition.z - this.blueFlag.mesh.position.z) < 0.1)
+    ) {
+      return false;
+    }
+
     return true;
   }
 
@@ -439,7 +472,7 @@ export class GameManager {
     this.checkWinConditions();
   }
 
-  // New method to check for collisions during movement
+  // Check for collisions during movement
   public checkCollisionDuringMovement(
     activeDie: Die,
     currentPosition: THREE.Vector3
@@ -519,10 +552,13 @@ export class GameManager {
       }
     }
 
+    // No need to check for flag collisions here anymore
+    // since dice can't move into flag cells in the first place
+
     return false;
   }
 
-  // This method is now only used for flag capture checks
+  // This method is now only used for fallback collision checks
   public checkCollisions(activeDie: Die, newPosition: THREE.Vector3) {
     // Check if the active die is red
     const isRedDie = this.redDice.includes(activeDie);
@@ -596,57 +632,42 @@ export class GameManager {
     return false;
   }
 
-  public checkFlagCapture(die: Die) {
-    const isRedDie = this.redDice.includes(die);
+  // Trigger win for a specific team
+  public triggerWin(team: "red" | "blue") {
+    console.log(`${team === "red" ? "Red" : "Blue"} team wins!`);
 
-    // Check if red die is at blue flag (opposite start position)
-    if (
-      isRedDie &&
-      Math.abs(die.mesh.position.x - this.oppositeStartPos.x) < 0.1 &&
-      Math.abs(die.mesh.position.z - this.oppositeStartPos.z) < 0.1
-    ) {
-      console.log("Red die captured blue flag!");
-      // Make all blue dice explode
-      const blueDiceCopy = [...this.blueDice];
-      blueDiceCopy.forEach((blueDie) => {
-        this.createExplosion(blueDie.mesh.position.clone(), 0x0066ff);
-        this.scene.remove(blueDie.mesh);
-      });
+    // Create explosion at the opposing flag
+    const flagPosition =
+      team === "red"
+        ? this.blueFlag.mesh.position.clone()
+        : this.redFlag.mesh.position.clone();
+    this.createExplosion(flagPosition, team === "red" ? 0xff0000 : 0x0066ff);
 
-      // Clear the blue dice array
+    // Make all opposing dice explode
+    const opposingDice =
+      team === "red" ? [...this.blueDice] : [...this.redDice];
+    opposingDice.forEach((die) => {
+      this.createExplosion(
+        die.mesh.position.clone(),
+        team === "red" ? 0x0066ff : 0xff0000
+      );
+      this.scene.remove(die.mesh);
+    });
+
+    // Clear the opposing dice array
+    if (team === "red") {
       this.blueDice.length = 0;
-
-      // Red team wins!
-      this.gameOver = true;
-      this.winner = "red";
-      console.log("Game over! Red team wins!");
-      return true;
-    }
-
-    // Check if blue die is at red flag (start position)
-    if (
-      !isRedDie &&
-      Math.abs(die.mesh.position.x - this.startPosition.x) < 0.1 &&
-      Math.abs(die.mesh.position.z - this.startPosition.z) < 0.1
-    ) {
-      console.log("Blue die captured red flag!");
-      // Make all red dice explode
-      const redDiceCopy = [...this.redDice];
-      redDiceCopy.forEach((redDie) => {
-        this.createExplosion(redDie.mesh.position.clone(), 0xff0000);
-        this.scene.remove(redDie.mesh);
-      });
-
-      // Clear the red dice array
+    } else {
       this.redDice.length = 0;
-
-      // Blue team wins!
-      this.gameOver = true;
-      this.winner = "blue";
-      console.log("Game over! Blue team wins!");
-      return true;
     }
 
+    // Set game over and winner
+    this.gameOver = true;
+    this.winner = team;
+  }
+
+  // This method is now empty as dice can't move into flag cells
+  public checkFlagCapture(die: Die) {
     return false;
   }
 
@@ -808,7 +829,6 @@ export class GameManager {
           die.mesh.rotateOnWorldAxis(axis, Math.PI / 2); // Rotate 90 degrees
 
           // Update the orientation based on the direction of roll
-          // die.updateOrientationAfterRoll(direction)
           die.updateTopFaceFromRotation();
 
           die.isRolling = false;
@@ -877,11 +897,10 @@ export class GameManager {
             this.occupiedPositions.splice(oldIndex, 1);
           }
 
-          // If no collision, add new position to occupied list and check for flag capture
+          // If no collision, add new position to occupied list
           this.occupiedPositions.push(newPositions[index].clone());
 
-          // Check if die captured a flag
-          this.checkFlagCapture(die);
+          // No need to check for flag capture since dice can't move into flag cells
         }
 
         // Decrement pending movements counter
@@ -957,7 +976,7 @@ export class GameManager {
     }
   }
 
-  // Clean up resources - removed dust particles disposal
+  // Clean up resources
   public dispose(): void {
     // No resources to clean up after removing particle system
   }
