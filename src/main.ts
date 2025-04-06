@@ -13,11 +13,12 @@ document.addEventListener("DOMContentLoaded", () => {
   container.id = "container";
   document.body.appendChild(container);
 
-  // Create scene manager
+  // Create scene manager with post-processing enabled
   const sceneManager = new SceneManager({
     container,
     enableShadows: true,
     enableFog: true,
+    enablePostProcessing: true,
   });
 
   // Define sizes for grid-based movement
@@ -50,7 +51,7 @@ document.addEventListener("DOMContentLoaded", () => {
     gameManager.blueFlag.mesh.position
   );
 
-  // Create cursor manager
+  // Create cursor manager (no visual cursor)
   const cursorManager = new CursorManager(sceneManager.scene, dieSize);
 
   // Function to update cursor position
@@ -104,7 +105,7 @@ document.addEventListener("DOMContentLoaded", () => {
       position: cursorManager.getCursorPosition(),
       targetPosition: cursorManager.getCursorTargetPosition(),
       updatePosition: updateCursorPosition,
-      mesh: null, // No main cursor
+      mesh: null, // No cursor mesh
     },
     dice: {
       redDice: gameManager.redDice,
@@ -158,9 +159,6 @@ document.addEventListener("DOMContentLoaded", () => {
   // Animation loop
   function animate() {
     requestAnimationFrame(animate);
-
-    // Update cursor animations
-    cursorManager.update();
 
     // Update UI displays
     const { rank } = gameManager.findHighestRankDice();

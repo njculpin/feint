@@ -26,7 +26,6 @@ export class GameManager {
   public blueFlag: Flag;
   public redFlag: Flag;
   private pendingDiceMovements = 0;
-  private collisionDetected = false;
 
   constructor(options: GameManagerOptions) {
     this.scene = options.scene;
@@ -573,7 +572,7 @@ export class GameManager {
 
         // Remove the active die
         this.scene.remove(activeDie.mesh);
-        const activeDiceArray = isRedDie ? this.redDice : this.redDice;
+        const activeDiceArray = isRedDie ? this.redDice : this.blueDice;
         const activeIndex = activeDiceArray.indexOf(activeDie);
         if (activeIndex !== -1) {
           activeDiceArray.splice(activeIndex, 1);
@@ -683,7 +682,7 @@ export class GameManager {
     }
   }
 
-  // Update the moveDie method to move all selected dice with better synchronization
+  // Update the moveDie method to remove dust particles
   public moveDie(
     direction: THREE.Vector3,
     animateCursorMovement?: (
@@ -720,7 +719,6 @@ export class GameManager {
 
     // Set rolling flag
     this.isRolling = true;
-    this.collisionDetected = false;
 
     // Store old positions for all dice
     const oldPositions = validSelectedDice.map((die) =>
@@ -957,5 +955,10 @@ export class GameManager {
     if (direction) {
       this.moveDie(direction, animateCursorMovement);
     }
+  }
+
+  // Clean up resources - removed dust particles disposal
+  public dispose(): void {
+    // No resources to clean up after removing particle system
   }
 }

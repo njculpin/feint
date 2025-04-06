@@ -1,16 +1,27 @@
 import * as THREE from "three";
 import { CameraManager } from "./camera-manager";
+import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
+import { SSAOPass } from "three/examples/jsm/postprocessing/SSAOPass.js";
+import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 
 export interface SceneManagerOptions {
   container: HTMLElement;
   enableShadows?: boolean;
   enableFog?: boolean;
+  enablePostProcessing?: boolean;
 }
 
 export class SceneManager {
   public scene: THREE.Scene;
   public renderer: THREE.WebGLRenderer;
   public cameraManager: CameraManager;
+
+  // Post-processing
+  private composer: EffectComposer | null = null;
+  private bloomPass: UnrealBloomPass | null = null;
+  private ssaoPass: SSAOPass | null = null;
 
   // Store lights for potential updates
   private ambientLight!: THREE.AmbientLight;
@@ -23,12 +34,19 @@ export class SceneManager {
 
   private enableShadows: boolean;
   private enableFog: boolean;
+  private enablePostProcessing: boolean;
 
   constructor(options: SceneManagerOptions) {
-    const { container, enableShadows = true, enableFog = true } = options;
+    const {
+      container,
+      enableShadows = true,
+      enableFog = true,
+      enablePostProcessing = true,
+    } = options;
 
     this.enableShadows = enableShadows;
     this.enableFog = enableFog;
+    this.enablePostProcessing = enablePostProcessing;
 
     // Scene setup
     this.scene = new THREE.Scene();
@@ -64,6 +82,11 @@ export class SceneManager {
 
     // Setup lights
     this.setupLights();
+
+    // Setup post-processing
+    if (this.enablePostProcessing) {
+      this.setupPostProcessing();
+    }
 
     // Handle window resize
     window.addEventListener("resize", this.handleResize.bind(this));
@@ -121,6 +144,40 @@ export class SceneManager {
     this.scene.add(this.blueFlagLight);
   }
 
+  private setupPostProcessing(): void {
+    // Create effect composer
+    this.composer = new EffectComposer(this.renderer);
+
+    // Add render pass
+    const renderPass = new RenderPass(this.scene, this.cameraManager.camera);
+    this.composer.addPass(renderPass);
+
+    // Add SSAO (ambient occlusion) pass
+    this.ssaoPass = new SSAOPass(
+      this.scene,
+      this.cameraManager.camera,
+      window.innerWidth,
+      window.innerHeight
+    );
+    this.ssaoPass.kernelRadius = 0.5;
+    this.ssaoPass.minDistance = 0.001;
+    this.ssaoPass.maxDistance = 0.1;
+    this.composer.addPass(this.ssaoPass);
+
+    // Add bloom pass for subtle glow
+    this.bloomPass = new UnrealBloomPass(
+      new THREE.Vector2(window.innerWidth, window.innerHeight),
+      0.3, // strength
+      0.4, // radius
+      0.85 // threshold
+    );
+    this.composer.addPass(this.bloomPass);
+
+    // Add output pass
+    const outputPass = new OutputPass();
+    this.composer.addPass(outputPass);
+  }
+
   // Method to update flag light positions based on actual flag positions
   public updateFlagLightPositions(
     redFlagPos: THREE.Vector3,
@@ -151,13 +208,47 @@ export class SceneManager {
     this.blueFlagLight.intensity = 0.7 * factor;
   }
 
+  // Method to adjust bloom effect intensity
+  public adjustBloomIntensity(strength: number): void {
+    if (this.bloomPass) {
+      this.bloomPass.strength = strength;
+    }
+  }
+
+  // Method to adjust ambient occlusion parameters
+  public adjustAmbientOcclusion(
+    kernelRadius: number,
+    minDistance: number,
+    maxDistance: number
+  ): void {
+    if (this.ssaoPass) {
+      this.ssaoPass.kernelRadius = kernelRadius;
+      this.ssaoPass.minDistance = minDistance;
+      this.ssaoPass.maxDistance = maxDistance;
+    }
+  }
+
   private handleResize(): void {
     // Update renderer size
     this.renderer.setSize(window.innerWidth, window.innerHeight);
+
+    // Update composer size
+    if (this.composer) {
+      this.composer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    // Update SSAO pass size
+    if (this.ssaoPass) {
+      this.ssaoPass.setSize(window.innerWidth, window.innerHeight);
+    }
   }
 
   public render(): void {
-    this.renderer.render(this.scene, this.cameraManager.camera);
+    if (this.enablePostProcessing && this.composer) {
+      this.composer.render();
+    } else {
+      this.renderer.render(this.scene, this.cameraManager.camera);
+    }
   }
 
   public resetCamera(): void {
@@ -174,6 +265,11 @@ export class SceneManager {
     // Dispose of renderer
     if (this.renderer) {
       this.renderer.dispose();
+    }
+
+    // Dispose of post-processing resources
+    if (this.composer) {
+      this.composer.dispose();
     }
   }
 }

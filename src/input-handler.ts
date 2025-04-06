@@ -275,9 +275,7 @@ export class InputHandler {
           }
 
           // Move cursor to the clicked die
-          this.cursor.position.x = clickedDie.mesh.position.x;
-          this.cursor.position.z = clickedDie.mesh.position.z;
-          this.cursor.updatePosition();
+          // Select the die without moving cursor
         }
       }
     } else if (!this.isCtrlPressed) {
