@@ -17,7 +17,7 @@ export class Flag {
   constructor(options: FlagOptions = {}) {
     // Set default values
     this.position = options.position || new THREE.Vector3(0, 0, 0);
-    const poleHeight = options.poleHeight || 2.0; // Even taller pole
+    const poleHeight = options.poleHeight || 4.0; // Even taller pole
     const poleRadius = options.poleRadius || 0.15; // Much thicker pole
     const flagWidth = options.flagWidth || 2.0; // Much wider flag
     const flagHeight = options.flagHeight || 1.2; // Much taller flag
@@ -44,7 +44,12 @@ export class Flag {
 
     // Position the pole so its bottom is at y=0
     pole.position.y = poleHeight / 2;
+    pole.castShadow = true;
+    pole.receiveShadow = true;
     this.mesh.add(pole);
+
+    // Add edge highlight to the pole
+    this.addEdgeHighlight(pole);
 
     // Create a triangular flag using an extruded shape for thickness
     const flagShape = new THREE.Shape();
@@ -91,12 +96,17 @@ export class Flag {
 
     // Position the flag near the top of the pole
     flag.position.set(0, poleHeight - flagHeight - 0.2, 0);
+    flag.castShadow = true;
+    flag.receiveShadow = true;
 
     // Rotate the flag to face the camera (perpendicular to the camera view)
     // Assuming camera is at positive Z looking toward origin
     flag.rotation.y = 0; // This makes the flag face the positive Z direction
 
     this.mesh.add(flag);
+
+    // Add edge highlight to the flag
+    this.addEdgeHighlight(flag);
 
     // Add a larger sphere at the top of the pole
     const topSphereGeometry = new THREE.SphereGeometry(
@@ -111,7 +121,35 @@ export class Flag {
     });
     const topSphere = new THREE.Mesh(topSphereGeometry, topSphereMaterial);
     topSphere.position.y = poleHeight;
+    topSphere.castShadow = true;
+    topSphere.receiveShadow = true;
     this.mesh.add(topSphere);
+
+    // Add edge highlight to the top sphere
+    this.addEdgeHighlight(topSphere);
+  }
+
+  // Add edge highlighting to a mesh
+  private addEdgeHighlight(targetMesh: THREE.Mesh): void {
+    // Create edges geometry from the target mesh's geometry
+    const edgeGeometry = new THREE.EdgesGeometry(targetMesh.geometry);
+
+    // Create a material for the edges
+    const edgeMaterial = new THREE.LineBasicMaterial({
+      color: 0x000000,
+      transparent: true,
+      opacity: 0.3,
+      linewidth: 1,
+    });
+
+    // Create the edge highlight mesh
+    const edgeHighlight = new THREE.LineSegments(edgeGeometry, edgeMaterial);
+
+    // Make the edge highlight slightly larger than the target mesh
+    edgeHighlight.scale.set(1.01, 1.01, 1.01);
+
+    // Add the edge highlight as a child of the target mesh
+    targetMesh.add(edgeHighlight);
   }
 
   // Set the position of the flag
