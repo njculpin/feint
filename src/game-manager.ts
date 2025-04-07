@@ -28,9 +28,6 @@ export class GameManager {
   public redFlag: Flag;
   private pendingDiceMovements = 0;
 
-  // Remove unused property
-  // public isPlayerTurn = true // true for player (red), false for AI (blue)
-
   // AI Manager
   public aiManager: AIManager;
 
@@ -874,7 +871,6 @@ export class GameManager {
     const customRoll = (
       die: Die,
       direction: THREE.Vector3,
-      index: number,
       onComplete?: () => void
     ) => {
       if (die.isRolling) return false;
@@ -978,7 +974,7 @@ export class GameManager {
 
     // Roll all dice
     validSelectedDice.forEach((die, index) => {
-      customRoll(die, direction, index, () => {
+      customRoll(die, direction, () => {
         // After rolling completes for each die
 
         // If no collision occurred during movement

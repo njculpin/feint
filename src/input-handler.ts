@@ -56,7 +56,6 @@ export class InputHandler {
   private initialCameraTarget: THREE.Vector3;
   private container: HTMLElement;
   private dieSize: number;
-  private _gameBoard: { boundaryLimit: number };
   private cursor: {
     position: THREE.Vector3;
     targetPosition: THREE.Vector3;
@@ -123,8 +122,6 @@ export class InputHandler {
     this.initialCameraTarget = options.initialCameraTarget;
     this.container = options.container;
     this.dieSize = options.dieSize;
-    // Keep reference but mark as unused with underscore
-    this._gameBoard = options.gameBoard;
     this.cursor = options.cursor;
     this.dice = options.dice;
     this.state = options.state;

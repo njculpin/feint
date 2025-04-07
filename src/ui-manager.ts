@@ -4,7 +4,6 @@ export interface UIManagerOptions {
 }
 
 export class UIManager {
-  private _container: HTMLElement;
   private instructionsElement: HTMLElement;
   private infoDisplay: HTMLElement;
   private gameStatusDisplay: HTMLElement;
@@ -17,8 +16,6 @@ export class UIManager {
   private previousBlueDiceCount = 0;
 
   constructor(options: UIManagerOptions) {
-    // Mark as unused with underscore
-    this._container = options.container;
     this.onRestartGame = options.onRestartGame;
 
     // Create UI elements

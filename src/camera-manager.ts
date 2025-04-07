@@ -15,7 +15,7 @@ export class CameraManager {
   public initialPosition: THREE.Vector3;
   public initialTarget: THREE.Vector3;
 
-  private container: HTMLElement;
+  // Remove the unused container variable
   private isAnimating = false;
   private animationId: number | null = null;
 
@@ -30,7 +30,6 @@ export class CameraManager {
       initialTarget = new THREE.Vector3(0, 0, 0),
     } = options;
 
-    this.container = options.container;
     this.initialPosition = initialPosition;
     this.initialTarget = initialTarget;
 
