@@ -4,7 +4,7 @@ export interface UIManagerOptions {
 }
 
 export class UIManager {
-  private container: HTMLElement;
+  private _container: HTMLElement;
   private instructionsElement: HTMLElement;
   private infoDisplay: HTMLElement;
   private gameStatusDisplay: HTMLElement;
@@ -15,11 +15,10 @@ export class UIManager {
   private previousWinner: "red" | "blue" | null = null;
   private previousRedDiceCount = 0;
   private previousBlueDiceCount = 0;
-  // Add a property to track whose turn it is
-  private previousIsPlayerTurn = true;
 
   constructor(options: UIManagerOptions) {
-    this.container = options.container;
+    // Mark as unused with underscore
+    this._container = options.container;
     this.onRestartGame = options.onRestartGame;
 
     // Create UI elements

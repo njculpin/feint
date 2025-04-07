@@ -56,7 +56,7 @@ export class InputHandler {
   private initialCameraTarget: THREE.Vector3;
   private container: HTMLElement;
   private dieSize: number;
-  private gameBoard: { boundaryLimit: number };
+  private _gameBoard: { boundaryLimit: number };
   private cursor: {
     position: THREE.Vector3;
     targetPosition: THREE.Vector3;
@@ -123,7 +123,8 @@ export class InputHandler {
     this.initialCameraTarget = options.initialCameraTarget;
     this.container = options.container;
     this.dieSize = options.dieSize;
-    this.gameBoard = options.gameBoard;
+    // Keep reference but mark as unused with underscore
+    this._gameBoard = options.gameBoard;
     this.cursor = options.cursor;
     this.dice = options.dice;
     this.state = options.state;
@@ -235,8 +236,8 @@ export class InputHandler {
     // Update the raycaster with the camera and mouse position
     this.raycaster.setFromCamera(this.mouse, this.camera);
 
-    // Find all red dice with highest rank
-    const { dice: highestDice } = this.dice.findHighestRankDice();
+    // Find all red dice with highest rank (not used directly but keeping the call for side effects)
+    this.dice.findHighestRankDice();
 
     // Get all dice meshes for intersection testing
     const allDiceMeshes = [...this.dice.redDice, ...this.dice.blueDice].map(

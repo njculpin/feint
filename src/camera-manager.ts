@@ -21,7 +21,7 @@ export class CameraManager {
 
   constructor(options: CameraManagerOptions) {
     const {
-      container,
+      // Remove unused container variable
       aspectRatio = window.innerWidth / window.innerHeight,
       fov = 45,
       near = 0.1,
@@ -30,7 +30,7 @@ export class CameraManager {
       initialTarget = new THREE.Vector3(0, 0, 0),
     } = options;
 
-    this.container = container;
+    this.container = options.container;
     this.initialPosition = initialPosition;
     this.initialTarget = initialTarget;
 

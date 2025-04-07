@@ -1006,9 +1006,9 @@ export class GameManager {
         if (this.pendingDiceMovements === 0) {
           // Remove dice that had collisions from selection
           diceToRemove.forEach((dieToRemove) => {
-            const index = this.selectedDice.indexOf(dieToRemove);
-            if (index !== -1) {
-              this.selectedDice.splice(index, 1);
+            const _index = this.selectedDice.indexOf(dieToRemove);
+            if (_index !== -1) {
+              this.selectedDice.splice(_index, 1);
             }
           });
 

@@ -2,8 +2,8 @@ import * as THREE from "three";
 import type { Die } from "./die";
 
 export class CursorManager {
-  private scene: THREE.Scene;
-  private dieSize: number;
+  private _scene: THREE.Scene;
+  private _dieSize: number;
   private cursorPosition = new THREE.Vector3(0, 0, 0);
   private cursorTargetPosition = new THREE.Vector3(0, 0, 0);
   private isCursorMoving = false;
@@ -15,9 +15,10 @@ export class CursorManager {
   private animationStartPosition = new THREE.Vector3();
   private onAnimationComplete: (() => void) | null = null;
 
-  constructor(scene: THREE.Scene, dieSize: number) {
-    this.scene = scene;
-    this.dieSize = dieSize;
+  constructor(_scene: THREE.Scene, _dieSize: number) {
+    // Mark as unused with underscore
+    this._scene = _scene;
+    this._dieSize = _dieSize;
   }
 
   // Update selected dice (no visual cursor)
